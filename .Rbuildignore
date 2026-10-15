@@ -1,8 +1,9 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^data-raw$
+^cran-comments\.md$
 ^README\.Rmd$
 ^LICENSE\.md$
 ^\.github$
-^data-raw$
-^INSTALLATION_GUIDE\.md$
-^EXAMPLES\.md$
+^doc$
+^Meta$

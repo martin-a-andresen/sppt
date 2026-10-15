@@ -1,0 +1,22 @@
+bibentry(
+  bibtype = "Article",
+  title   = "Testing for similarity in area-based spatial patterns: A nonparametric Monte Carlo approach",
+  author  = person("Martin A.", "Andresen"),
+  journal = "Applied Geography",
+  year    = "2009",
+  volume  = "29",
+  number  = "3",
+  pages   = "333--345",
+  doi     = "10.1016/j.apgeog.2008.12.004",
+  header  = "To cite the spatial point pattern test, please use:"
+)
+
+bibentry(
+  bibtype = "Article",
+  title   = "Testing longitudinal change in spatial distributions and patterns: An extension of the spatial point pattern test",
+  author  = person("Martin A.", "Andresen"),
+  journal = "Annals of the American Association of Geographers",
+  year    = "2026",
+  note    = "In press",
+  header  = "To cite sppt_longitudinal(), please also use:"
+)

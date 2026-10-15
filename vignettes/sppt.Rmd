@@ -1,0 +1,165 @@
+---
+title: "Comparing two spatial patterns with sppt()"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Comparing two spatial patterns with sppt()}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 6,
+                      fig.height = 5, dpi = 72)
+```
+
+The spatial point pattern test asks whether two sets of events, for example
+residential burglaries in two different years, are distributed the same way
+across a set of areal units. `sppt()` answers that unit by unit, and then
+summarises the whole map.
+
+```{r}
+library(sppt)
+```
+
+## Getting started
+
+The package includes residential (`BNER`) and commercial (`BNEC`) burglary
+counts for Vancouver from 2003 to 2025, in 127 census tracts
+(`vancouver_ct`) and 1,016 dissemination areas (`vancouver_da`).
+
+To compare residential burglary in 2003 (the base) with 2025 (the test), name
+the identifier column and the two count columns. `alpha = 0.05` is the
+default and is shown here for clarity.
+
+```{r quick}
+res <- sppt(
+  data      = vancouver_ct,
+  group_col = "id",
+  count_col = c("BNER2003", "BNER2025"),
+  B         = 999,
+  alpha     = 0.05,
+  seed      = 42,
+  create_maps = FALSE
+)
+```
+
+The console report gives:
+
+* **lambda_min**, the mean number of events per unit in the rarer pattern,
+  which governs power, and the decision tier that follows from it;
+* the **robust S index**, the share of units (not empty in both years) whose
+  share of events did not change significantly;
+* the **sameness test**, which asks whether that S index is lower than two
+  realisations of one process would give;
+* the **arrangement test**, Moran's I on the signed evidence surface, which
+  asks whether the differences cluster in space.
+
+`summary()` repeats the key results at any time.
+
+```{r}
+summary(res)
+```
+
+Each unit gets a p-value and a direction: 1 where the test pattern has the
+larger share, -1 where the base has, and 0 where the difference is not
+significant.
+
+```{r}
+table(res$sig_pvalue_dir, useNA = "ifany")
+```
+
+The p-value is the bounded Monte Carlo form $p = (1 + r)/(B + 1)$, so it is
+never exactly zero; with `B = 999` the smallest possible value is 0.001.
+`B = 4999` (the default) is recommended for final analyses.
+
+## Maps
+
+With `create_maps = TRUE` (the default), `sppt()` prints a difference map and
+a significance map and stores both on the result. `sppt_map()` redraws them,
+with the legend, north arrow and scale bar wherever suits your study area.
+
+```{r map}
+sppt_map(res, "pvalue")
+```
+
+```{r map-custom}
+sppt_map(res, "pvalue", legend_position = "right",
+         north_arrow = "tl", scale_bar = "br", title = FALSE)
+```
+
+The maps are ordinary `ggplot` objects, so anything else can be changed by
+adding to them, for example
+`sppt_map(res, "difference") + ggplot2::scale_fill_viridis_c()`.
+
+## Saving results
+
+Nothing is written to disk unless you ask. To save the maps and the result,
+name a directory:
+
+```{r export, eval = FALSE}
+res <- sppt(vancouver_ct, group_col = "id",
+            count_col = c("BNER2003", "BNER2025"),
+            export_maps = TRUE, export_results = TRUE,
+            export_format = "gpkg", export_dir = "sppt_output")
+```
+
+`export_format = "rds"` keeps the summary and the maps with the data;
+`readRDS()` restores everything, and `summary()` and `sppt_map()` work on the
+reloaded object. The result is also an ordinary `sf` object, so
+`sf::st_write()` works on it directly.
+
+## All options
+
+The call below lists every argument with its default value.
+
+```{r all-options, eval = FALSE}
+res <- sppt(
+  data               = vancouver_ct,
+  group_col          = "id",
+  count_col          = c("BNER2003", "BNER2025"), # base, then test
+  B                  = 4999,    # bootstrap replicates; odd avoids ties
+  seed               = NULL,    # set for reproducible results
+  alpha              = 0.05,    # unit-level significance level
+  calculate_pvalues  = TRUE,    # bootstrap p-values
+  sameness_tau       = 0.05,    # significance level of the sameness test
+  arrangement        = TRUE,    # Moran's I on the signed evidence surface
+  nsim_moran         = 999,     # permutations for global Moran's I
+  calculate_ci       = FALSE,   # also compute marginal CI overlap (2009)
+  conf_level         = 0.683,   # CI level; matches alpha = 0.05
+  fix_base           = FALSE,   # TRUE = do not bootstrap the base pattern
+  use_percentages    = TRUE,    # percentages (0-100) rather than proportions
+  verbose            = TRUE,    # print the console report
+  create_maps        = TRUE,    # build, print and store the maps
+  map_crs            = NULL,    # CRS for the maps; NULL keeps that of data
+  export_maps        = FALSE,   # save maps as PNG in export_dir
+  export_dir         = NULL,    # required for any export
+  map_dpi            = 300,     # resolution of exported maps
+  export_results     = FALSE,   # save the result
+  export_format      = "gpkg",  # gpkg, shp, csv, txt or rds
+  export_results_dir = NULL     # defaults to export_dir
+)
+```
+
+### Confidence interval overlap
+
+The original test (Andresen 2009) compared bootstrap confidence intervals.
+`calculate_ci = TRUE` adds that method alongside the p-values, using the same
+bootstrap replicates. The default `conf_level = 0.683` (about one standard
+deviation per tail) matches the performance of `alpha = 0.05` p-values; 0.95
+reproduces the original, more conservative analysis.
+
+### Fixed base
+
+`fix_base = TRUE` treats the base pattern as known rather than sampled. That
+suits a comparison against a theoretical or population distribution, but the
+test is then asymmetric, and the sameness test is not reported.
+
+## References
+
+Andresen, M.A. (2009). Testing for similarity in area-based spatial patterns:
+A nonparametric Monte Carlo approach. *Applied Geography*, 29(3), 333-345.
+<doi:10.1016/j.apgeog.2008.12.004>
+
+Andresen, M.A. (2016). An area-based nonparametric spatial point pattern
+test: The test, its applications, and the future. *Methodological
+Innovations*, 9, Article 12. <doi:10.1177/2059799116630659>

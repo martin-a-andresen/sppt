@@ -1,31 +1,49 @@
-Package: sppt.aggregated.data
+Package: sppt
 Type: Package
-Title: Spatial Pattern Point Test for Aggregated Data
-Version: 0.1.0
-Authors@R: c(
-    person("Martin", "Andresen", email = "martin.andresen@gmail.com", role = c("aut", "cre")),
-    person("Contributor", "Name", role = "ctb"))
-Description: Performs spatial pattern point tests on aggregated count data using 
-    bootstrap resampling. Compares spatial distributions between variables and 
-    calculates S-Index metrics to quantify spatial pattern overlap. Supports 
-    visualization and export of results in multiple formats.
+Title: Spatial Point Pattern Test for Areal Data
+Version: 1.0.0
+Authors@R:
+    person("Martin A.", "Andresen", email = "andresen@sfu.ca",
+           role = c("aut", "cre", "cph"),
+           comment = c(ORCID = "0000-0002-4767-7276"))
+Description: Implements the area-based nonparametric spatial point pattern
+    test of Andresen (2009) <doi:10.1016/j.apgeog.2008.12.004> for comparing
+    two spatial distributions of events aggregated to areal units, with the
+    applications and extensions reviewed in Andresen (2016)
+    <doi:10.1177/2059799116630659>. Unit-level inference uses bounded Monte
+    Carlo bootstrap p-values, with marginal confidence interval overlap
+    retained as an option. Global similarity is summarised by the robust S
+    index, accompanied by a test of whether two patterns are more different
+    than two realisations of a single process, and a test of the spatial
+    arrangement of the differences. A longitudinal extension compares each
+    period of a time series against a base period and classifies unit-level
+    trajectories. Publication-ready maps can be redrawn with user-chosen
+    layouts.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 7.2.3
-Depends: 
-    R (>= 3.5.0)
+LazyDataCompression: xz
+Depends:
+    R (>= 4.1.0)
 Imports:
+    classInt,
+    ggplot2 (>= 3.5.0),
+    ggspatial,
+    graphics,
+    grDevices,
     Matrix,
-    dplyr,
-    tidyr,
     rlang,
+    scales,
     sf,
-    stats
+    spdep,
+    stats,
+    tools,
+    utils
 Suggests:
-    knitr (>= 1.40),
-    rmarkdown (>= 2.20),
+    knitr,
+    rmarkdown,
     testthat (>= 3.0.0)
 VignetteBuilder: knitr
-URL: https://github.com/martin-a-andresen/sppt.aggregated.data
-BugReports: https://github.com/martin-a-andresen/sppt.aggregated.data/issues
+Config/testthat/edition: 3
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
