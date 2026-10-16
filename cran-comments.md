@@ -9,3 +9,4 @@
 
 * local Windows 11, R 4.5.3
 * win-builder, R-devel (2026-10-14 r90673)
+* R-hub: Linux, macOS (x86_64) and macOS (arm64), R-devel
