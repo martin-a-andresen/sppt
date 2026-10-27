@@ -1189,45 +1189,41 @@ summary.sppt_long_result <- function(object, ...) {
     table(factor(object[[col("Trend_p")]])) else NULL
 
   cc <- meta$count_col
-  cat("\n")
-  cat("==================================================================\n")
-  cat("Longitudinal SPPT Summary\n")
-  cat("==================================================================\n")
-  cat(sprintf("  Periods          : %d (%s to %s; base %s)\n", length(cc),
-              cc[1], cc[length(cc)], cc[1]))
-  cat(sprintf("  Spatial units    : %d  (%d with at least one event)\n",
-              meta$n_units, meta$nonzero_units))
-  cat(sprintf("  Bootstrap B      : %d\n", meta$B))
-  cat(sprintf("  Envelope level   : %.1f%%\n", meta$conf_level * 100))
+  cat("\n", rule_line("="), "Longitudinal SPPT Summary\n", rule_line("="),
+      sep = "")
+  cat(field_lines("Periods", sprintf("%d (%s to %s; base %s)", length(cc),
+                                     cc[1], cc[length(cc)], cc[1])))
+  cat(field_lines("Units", sprintf("%d (%d with at least one event)",
+                                   meta$n_units, meta$nonzero_units)))
+  cat(field_lines("Bootstrap B", meta$B))
+  cat(field_lines("Envelope level", sprintf("%.1f%%", meta$conf_level * 100)))
   if (isTRUE(meta$calculate_pvalues))
-    cat(sprintf("  P-value alpha    : %.3f\n", meta$alpha))
-  cat(sprintf("  Trend            : %s, alpha = %.3f\n", meta$trend_type,
-              meta$trend_alpha))
-  cat("------------------------------------------------------------------\n")
-  cat("                     all units          units with events\n")
+    cat(field_lines("alpha", sprintf("%.3f", meta$alpha)))
+  cat(field_lines("Trend", sprintf("%s, alpha = %.3f", meta$trend_type,
+                                   meta$trend_alpha)))
+  cat(rule_line("-"))
+  cat("                      all units   units with events\n")
   row <- function(lbl, a, b)
-    cat(sprintf("  %-18s %8.4f           %8.4f\n", lbl, a, b))
+    cat(sprintf("    %-16s %11.4f %19.4f\n", lbl, a, b))
   if (!is.null(p_all)) {
     cat("  P-value indices\n")
-    row("  stable (S)", p_all["overlap"], p_rob["overlap"])
-    row("  average", p_all["average"], p_rob["average"])
-    row("  sustained zero", p_all["sustained"], p_rob["sustained"])
-    row("  combined", p_all["combined"], p_rob["combined"])
+    row("stable (S)", p_all["overlap"], p_rob["overlap"])
+    row("average", p_all["average"], p_rob["average"])
+    row("sustained zero", p_all["sustained"], p_rob["sustained"])
+    row("combined", p_all["combined"], p_rob["combined"])
   }
   cat("  Envelope indices\n")
-  row("  stable (S)", env_all["overlap"], env_rob["overlap"])
-  row("  average", env_all["average"], env_rob["average"])
-  row("  sustained zero", env_all["sustained"], env_rob["sustained"])
-  row("  combined", env_all["combined"], env_rob["combined"])
-  cat("------------------------------------------------------------------\n")
-  show_tab <- function(lbl, tb)
-    cat(sprintf("  %-18s %s\n", lbl,
-                paste(sprintf("%s: %d", names(tb), as.integer(tb)),
-                      collapse = "  ")))
-  if (!is.null(trend_p)) show_tab("Trend_p codes", trend_p)
-  show_tab("Trend codes", trend_env)
-  cat("  (see ?sppt_longitudinal for the trend codes)\n")
-  cat("==================================================================\n\n")
+  row("stable (S)", env_all["overlap"], env_rob["overlap"])
+  row("average", env_all["average"], env_rob["average"])
+  row("sustained zero", env_all["sustained"], env_rob["sustained"])
+  row("combined", env_all["combined"], env_rob["combined"])
+  cat(rule_line("-"))
+  tab_text <- function(tb)
+    paste(sprintf("%s: %d", names(tb), as.integer(tb)), collapse = ", ")
+  if (!is.null(trend_p)) cat(field_lines("Trend_p codes", tab_text(trend_p)))
+  cat(field_lines("Trend codes", tab_text(trend_env)))
+  cat(field_lines("", "see ?sppt_longitudinal for the trend codes"))
+  cat(rule_line("="), "\n", sep = "")
 
   invisible(list(meta = meta,
                  indices = list(envelope = rbind(all = env_all,

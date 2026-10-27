@@ -35,6 +35,23 @@ say_if <- function(verbose) {
   function(...) if (isTRUE(verbose)) cat(...)
 }
 
+# Console layout. Every report line fits in 70 columns: a label padded to a
+# fixed width, then the text wrapped with a hanging indent.
+field_lines <- function(label, text, width = 70L, label_width = 14L) {
+  pad   <- strrep(" ", label_width + 5L)
+  first <- if (nzchar(label))
+    sprintf("  %-*s : ", label_width, label) else pad
+  # Keep comparisons such as "alpha = 0.05" on one line: the spaces around
+  # them are swapped for a printable placeholder while wrapping.
+  text  <- gsub(" (=|<=|>=|<|>) ", "~\\1~", as.character(text))
+  body  <- gsub("~", " ", strwrap(text, width = width - nchar(pad)),
+                fixed = TRUE)
+  if (!length(body)) body <- ""
+  paste0(c(first, rep(pad, length(body) - 1L)), body, "\n", collapse = "")
+}
+
+rule_line <- function(ch = "=", width = 66L) paste0(strrep(ch, width), "\n")
+
 # Directory check shared by every export option. Nothing is ever written
 # unless the user names a directory.
 check_export_dir <- function(export_dir, what) {

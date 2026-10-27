@@ -217,43 +217,36 @@ sppt_clusters <- function(result, rule = c("one_gap", "contiguous"),
 #' @export
 print.sppt_clusters <- function(x, ...) {
   st <- x$settings
-  cat("\n")
-  cat("==================================================================\n")
-  cat("SPPT Cluster Test\n")
-  cat("==================================================================\n")
-  cat(sprintf("  Rule            : %s%s\n",
-              if (st$rule == "one_gap") "one gap" else "contiguous",
-              if (st$direction) ", within direction" else ""))
-  cat(sprintf("  Flagged units   : %d of %d eligible (alpha = %.3f)\n",
-              st$n_flagged, st$n_eligible, st$alpha))
-  cat(sprintf("  Null draws      : %d (%s); ceiling at level %.2f\n",
-              st$nsim, if (st$null_count == "fixed")
-                "fixed share of units flagged" else "binomial flags",
-              st$level))
-  cat(sprintf("  Ceiling (units) : %s\n",
-              paste(sprintf("%d cluster%s >= %d", x$ceiling$n_clusters,
-                            ifelse(x$ceiling$n_clusters == 1L, "", "s"),
-                            x$ceiling$min_size),
-                    collapse = ", ")))
-  cat("------------------------------------------------------------------\n")
+  cat("\n", rule_line("="), "SPPT Cluster Test\n", rule_line("="), sep = "")
+  cat(field_lines("Rule", paste0(
+    if (st$rule == "one_gap") "one gap" else "contiguous",
+    if (st$direction) ", within direction" else ", either direction")))
+  cat(field_lines("Flagged units", sprintf("%d of %d eligible (alpha = %.3f)",
+                                           st$n_flagged, st$n_eligible,
+                                           st$alpha)))
+  cat(field_lines("Null draws", sprintf(
+    "%d (%s); ceiling at level %.2f", st$nsim,
+    if (st$null_count == "fixed") "fixed share flagged" else "binomial flags",
+    st$level)))
+  cat(rule_line("-"))
   if (nrow(x$tests) == 0L) {
     cat("  No flagged units form a cluster.\n")
   } else {
-    cat("  k   observed   ceiling   p-value\n")
+    cat("  k   k-th largest   ceiling   p-value\n")
     for (i in seq_len(nrow(x$tests)))
-      cat(sprintf("  %-3d %8d %9d   %7.4f%s\n", x$tests$k[i],
+      cat(sprintf("  %-3d %12d %9d   %7.4f%s\n", x$tests$k[i],
                   x$tests$observed[i], x$tests$ceiling[i],
                   x$tests$p_value[i],
                   if (x$tests$exceeds[i]) "  *" else ""))
-    cat("  * the k largest clusters are all at least this size, which chance\n")
-    cat("    reaches in no more than the stated share of draws\n")
+    cat(field_lines("", paste(
+      "* the k largest clusters all reach the ceiling, which chance",
+      "does in no more than the stated share of draws")))
     big <- x$clusters[x$clusters$exceeds, , drop = FALSE]
     if (nrow(big) > 0L)
-      cat(sprintf("  Clusters above the single-cluster ceiling: %s\n",
-                  paste(sprintf("%d units (%s)", big$size, big$direction),
-                        collapse = "; ")))
+      cat(field_lines("Above ceiling", paste(
+        sprintf("%d units (%s)", big$size, big$direction), collapse = "; ")))
   }
-  cat("==================================================================\n\n")
+  cat(rule_line("="), "\n", sep = "")
   invisible(x)
 }
 

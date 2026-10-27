@@ -36,8 +36,8 @@
 #'   for [sppt_longitudinal()] maps.
 #' @param crs CRS to project the maps to, passed to [sf::st_transform()].
 #'   `NULL` keeps the CRS of the result.
-#' @param title Logical. Keep the map titles. `FALSE` removes them, as
-#'   journals usually require. Default `TRUE`.
+#' @param title Logical. Keep the map titles and subtitles. `FALSE` removes
+#'   both, as journals usually require. Default `TRUE`.
 #'
 #' @return A `ggplot` object when `which` names a single map, otherwise a
 #'   named list of `ggplot` objects.
@@ -181,8 +181,10 @@ scale_bar_layer <- function(location, width_hint, pad = NULL) {
   }
 }
 
+# Without a title the map carries no text above the panel, as journals
+# usually require; the subtitle goes too.
 drop_title <- function(p, keep) {
-  if (isTRUE(keep)) p else p + ggplot2::labs(title = NULL)
+  if (isTRUE(keep)) p else p + ggplot2::labs(title = NULL, subtitle = NULL)
 }
 
 strip_sppt_class <- function(x) {

@@ -301,15 +301,15 @@ sppt <- function(data,
   lambda_min <- min(N_a, N_b) / n_units
 
   decision_tier <- if (lambda_min >= 17) {
-    "Coarse scale (lambda_min >= 17): CI and PV methods both reliable.\n    PV alpha = 0.05; FDR-priority use alpha = 0.01."
+    "Coarse scale (lambda_min >= 17): CI and PV methods both reliable. PV alpha = 0.05; FDR-priority use alpha = 0.01."
   } else if (lambda_min >= 6) {
-    "Medium-high scale (6 <= lambda_min < 17): PV alpha = 0.05 recommended;\n    FDR-priority use alpha = 0.01 once lambda_min is above about 10."
+    "Medium-high scale (6 <= lambda_min < 17): PV alpha = 0.05 recommended; FDR-priority use alpha = 0.01 once lambda_min is above about 10."
   } else if (lambda_min >= 1.5) {
     "Medium scale (1.5 <= lambda_min < 6): PV alpha = 0.05 recommended."
   } else if (lambda_min >= 0.5) {
-    "Fine scale (0.5 <= lambda_min < 1.5): Power is limited; interpret\n    core and edge units rather than isolated flags."
+    "Fine scale (0.5 <= lambda_min < 1.5): power is limited; interpret core and edge units rather than isolated flags."
   } else {
-    "Very fine scale (lambda_min < 0.5): All methods have severely limited\n    power. Consider aggregating to a coarser spatial unit."
+    "Very fine scale (lambda_min < 0.5): all methods have severely limited power. Consider aggregating to a coarser spatial unit."
   }
 
   if (lambda_min < 0.5) {
@@ -334,22 +334,21 @@ sppt <- function(data,
   }
 
   # -- 4. Console header ------------------------------------------------------
-  say("\n")
-  say("==================================================================\n")
-  say("Spatial Point Pattern Test\n")
-  say("==================================================================\n")
-  say(sprintf("  Base variable : %s  (N = %d)\n", base_name, N_a))
-  say(sprintf("  Test variable : %s  (N = %d)\n", test_name, N_b))
-  say(sprintf("  Spatial units : %d\n", n_units))
-  say(sprintf("  lambda_min    : %.3f\n", lambda_min))
-  say(sprintf("  Bootstrap B   : %d\n", B))
+  # Lines are wrapped to fit 70 columns; see field_lines().
+  say("\n", rule_line("="), "Spatial Point Pattern Test\n", rule_line("="),
+      sep = "")
+  say(field_lines("Base", sprintf("%s (N = %d)", base_name, N_a)))
+  say(field_lines("Test", sprintf("%s (N = %d)", test_name, N_b)))
+  say(field_lines("Units", n_units))
+  say(field_lines("lambda_min", sprintf("%.3f", lambda_min)))
+  say(field_lines("Bootstrap B", B))
   if (calculate_pvalues)
-    say(sprintf("  P-value alpha : %.3f\n", alpha))
+    say(field_lines("alpha", sprintf("%.3f", alpha)))
   if (calculate_ci)
-    say(sprintf("  CI level      : %.1f%%  (marginal overlap criterion)\n",
-                conf_level * 100))
-  say(sprintf("  Decision tier : %s\n", decision_tier))
-  say("------------------------------------------------------------------\n")
+    say(field_lines("CI level", sprintf("%.1f%% (marginal overlap)",
+                                        conf_level * 100)))
+  say(field_lines("Decision tier", decision_tier))
+  say(rule_line("-"))
 
   # -- 5. Observed proportions and difference ---------------------------------
   scale_factor <- if (use_percentages) 100 else 1
@@ -478,7 +477,8 @@ sppt <- function(data,
       arrangement_test(data, obs_diff, pvalue, zero_mask, sig_pv_dir,
                        nsim_moran),
       error = function(e) {
-        message("Arrangement test failed: ", conditionMessage(e))
+        warning("Arrangement test failed, so no tiers are assigned: ",
+                conditionMessage(e), call. = FALSE)
         NULL
       })
   }
@@ -533,88 +533,68 @@ sppt <- function(data,
 
   # -- 12. Console results ----------------------------------------------------
   if (calculate_pvalues && !is.na(s_index_pv)) {
-    say(sprintf("  Robust S-index  : %.4f  (%d of %d units dissimilar at alpha = %.3f)\n",
-                s_index_pv, n_sig_pv, n_eligible, alpha))
-    say(sprintf("    %s > %s : %d units\n", test_name, base_name,
-                sum(sig_pv_dir[!zero_mask] == 1L, na.rm = TRUE)))
-    say(sprintf("    %s > %s : %d units\n", base_name, test_name,
-                sum(sig_pv_dir[!zero_mask] == -1L, na.rm = TRUE)))
+    say(field_lines("Robust S", sprintf("%.4f (%d of %d units differ)",
+                                        s_index_pv, n_sig_pv, n_eligible)))
+    say(field_lines("", sprintf("%d units %s > %s",
+                                sum(sig_pv_dir[!zero_mask] == 1L, na.rm = TRUE),
+                                test_name, base_name)))
+    say(field_lines("", sprintf("%d units %s > %s",
+                                sum(sig_pv_dir[!zero_mask] == -1L, na.rm = TRUE),
+                                base_name, test_name)))
   }
 
   if (!is.null(sameness) && !is.na(sameness$p_value)) {
-    say(sprintf("  Sameness test   : S = %.4f vs %.4f expected, p %s (%s)\n",
-                sameness$s_index, sameness$s_expected,
-                fmt_p(sameness$p_value), sameness$method))
-    say(sprintf("    Threshold     : S >= %.4f at tau = %.2f\n",
-                sameness$threshold, sameness$tau))
-    say(sprintf("    Verdict       : %s\n",
-                if (isTRUE(sameness$same))
-                  "no more different than two realisations of one process"
-                else
-                  "more different than two realisations of one process"))
+    say(field_lines("Sameness", sprintf(
+      "p %s (%s); S >= %.4f needed at tau = %.2f; %s",
+      fmt_p(sameness$p_value), sameness$method, sameness$threshold,
+      sameness$tau,
+      if (isTRUE(sameness$same))
+        "no more different than two realisations of one process"
+      else "more different than two realisations of one process")))
     if (n_eligible < n_units * 0.75)
-      say("    Note          : many units empty in both patterns; the sameness\n",
-          "                    test is conservative here.\n", sep = "")
+      say(field_lines("", paste("Many units are empty in both patterns;",
+                                "the sameness test is conservative here.")))
   } else if (calculate_pvalues && !is.na(s_index_pv) && fix_base) {
-    say("  Sameness test   : not reported (not calibrated for fix_base = TRUE).\n")
+    say(field_lines("Sameness", "not reported (not calibrated for fix_base = TRUE)"))
   }
 
   if (calculate_ci && !is.na(s_index_ci)) {
-    say(sprintf("  Robust CI-index : %.4f  (%d of %d units dissimilar at CI = %.1f%%)\n",
-                s_index_ci, n_sig_ci, n_eligible, conf_level * 100))
-    say(sprintf("    %s > %s : %d units\n", test_name, base_name,
-                sum(sig_ci_dir[!zero_mask] == 1L, na.rm = TRUE)))
-    say(sprintf("    %s > %s : %d units\n", base_name, test_name,
-                sum(sig_ci_dir[!zero_mask] == -1L, na.rm = TRUE)))
+    say(field_lines("Robust S (CI)", sprintf(
+      "%.4f (%d of %d units differ at CI = %.1f%%)", s_index_ci, n_sig_ci,
+      n_eligible, conf_level * 100)))
   }
 
   if (!is.null(arrange_res)) {
-    say(sprintf("  Arrangement     : Moran's I = %+.4f on signed evidence, p %s (%d perms)\n",
-                arrange_res$moran_I, fmt_p(arrange_res$moran_p),
-                arrange_res$nsim))
-    say(sprintf("    Local clusters: %d units where %s > %s, %d units where %s > %s\n",
-                arrange_res$n_hh, test_name, base_name,
-                arrange_res$n_ll, base_name, test_name))
-    say(sprintf("  Flagged units   : %d core, %d edge, %d outside\n",
-                arrange_res$n_core, arrange_res$n_edge,
-                arrange_res$n_outside))
-    say("    core = inside a cluster; edge = borders a core unit with the same\n",
-        "    sign; outside = all other flagged units (least reliable)\n",
-        sep = "")
+    say(field_lines("Arrangement", sprintf(
+      "Moran's I = %+.3f on signed evidence, p %s (%d permutations)",
+      arrange_res$moran_I, fmt_p(arrange_res$moran_p), arrange_res$nsim)))
+    say(field_lines("Clusters", sprintf(
+      "%d units %s > %s; %d units %s > %s", arrange_res$n_hh, test_name,
+      base_name, arrange_res$n_ll, base_name, test_name)))
+    say(field_lines("Tiers", sprintf(
+      "%d core, %d edge, %d outside (core = inside a cluster; edge = borders a core unit with the same sign)",
+      arrange_res$n_core, arrange_res$n_edge, arrange_res$n_outside)))
     if (wide_shift && arrange_res$n_edge > 0L)
-      say(sprintf(paste0(
-        "    Note: %.0f%% of flagged units share one direction. Edge units\n",
-        "    are still significant, but a widespread shift places flagged\n",
-        "    units beside clusters by chance; weigh core units more heavily.\n"),
-        100 * arrange_res$dominant_share))
+      say(field_lines("Note", sprintf(paste(
+        "%.0f%% of flagged units share one direction. Edge units are still",
+        "significant, but a widespread shift places flagged units beside",
+        "clusters by chance; weigh core units more heavily."),
+        100 * arrange_res$dominant_share)))
   }
 
   # Two-way verdict: the count question and the arrangement question are
   # separate, and the pair says more than either alone.
   if (!is.null(sameness) && !is.na(sameness$p_value) && !is.null(arrange_res)) {
-    count_hi <- !isTRUE(sameness$same)
-    arr_hi   <- isTRUE(arrange_res$clustered)
-    mark <- function(a, b) if (count_hi == a && arr_hi == b) " <<<" else ""
-    say("\n  Two-way verdict\n")
-    say("                       | arrangement random    | arrangement clustered\n")
-    say("    -----------------------------------------------------------------\n")
-    say(sprintf("    count at chance    | same process%-10s| few differences, but concentrated%s\n",
-                mark(FALSE, FALSE), mark(FALSE, TRUE)))
-    say(sprintf("    count above chance | many, diffuse%-10s| differences real and localised%s\n",
-                mark(TRUE, FALSE), mark(TRUE, TRUE)))
-    say(sprintf("    This result        : %s, %s%s\n",
-                if (count_hi) "count above chance" else "count at chance",
-                if (arr_hi) "arrangement clustered" else "arrangement random",
-                # Clusters can sit on top of a citywide shift in one
-                # direction; "localised" alone would undersell the shift.
-                if (count_hi && arr_hi && wide_shift)
-                  ",\n                         plus a widespread shift" else ""))
+    say("\n", verdict_table(!isTRUE(sameness$same),
+                             isTRUE(arrange_res$clustered), wide_shift),
+        sep = "")
   }
 
   if (n_zero > 0L)
-    say(sprintf("  Note: %d zero-zero units excluded from S-index and inference.\n",
-                n_zero))
-  say("==================================================================\n\n")
+    say(field_lines("Note", sprintf(
+      "%d units empty in both patterns excluded from the S index and inference.",
+      n_zero)))
+  say(rule_line("="), "\n", sep = "")
 
   # -- 13. Summary attribute and class ----------------------------------------
   attr(result, "sppt_summary") <- list(
@@ -686,6 +666,30 @@ sppt <- function(data,
 # -- Internal helpers ---------------------------------------------------------
 
 fmt_p <- function(p) if (p < 0.0001) "< 0.0001" else sprintf("= %.4f", p)
+
+# The four cells of the two-way verdict: count above chance (sameness
+# rejected) by arrangement clustered (global Moran's I significant).
+verdict_label <- function(count_hi, arr_hi, wide_shift = FALSE) {
+  lab <- if (!count_hi && !arr_hi) "same process"
+  else if (!count_hi && arr_hi) "few differences, but concentrated"
+  else if (count_hi && !arr_hi) "many differences, diffuse"
+  else "differences real and localised"
+  if (count_hi && arr_hi && wide_shift) lab <- paste(lab, "plus a widespread shift")
+  lab
+}
+
+verdict_table <- function(count_hi, arr_hi, wide_shift = FALSE) {
+  mark <- function(a, b) if (count_hi == a && arr_hi == b) " <<<" else ""
+  paste0(
+    "  Two-way verdict    | arrangement random | arrangement clustered\n",
+    sprintf("  count at chance    | same process%s%s| few, concentrated%s\n",
+            mark(FALSE, FALSE), strrep(" ", 7 - nchar(mark(FALSE, FALSE))),
+            mark(FALSE, TRUE)),
+    sprintf("  count above chance | many, diffuse%s%s| real, localised%s\n",
+            mark(TRUE, FALSE), strrep(" ", 6 - nchar(mark(TRUE, FALSE))),
+            mark(TRUE, TRUE)),
+    field_lines("This result", verdict_label(count_hi, arr_hi, wide_shift)))
+}
 
 # Global and local Moran's I on the signed evidence surface, and the
 # confidence tier of every flagged unit.
@@ -776,45 +780,45 @@ summary.sppt_result <- function(object, ...) {
   s <- attr(object, "sppt_summary")
   if (is.null(s)) return(NextMethod())
 
-  cat("\n")
-  cat("==================================================================\n")
-  cat("SPPT Summary\n")
-  cat("==================================================================\n")
-  cat(sprintf("  Base             : %s\n", s$base_name))
-  cat(sprintf("  Test             : %s\n", s$test_name))
-  cat(sprintf("  Spatial units    : %d  (%d eligible, %d zero-zero excluded)\n",
-              s$n_units, s$n_eligible, s$n_zero))
-  cat(sprintf("  lambda_min       : %.3f\n", s$lambda_min))
-  cat(sprintf("  Bootstrap B      : %d\n", s$B))
+  cat("\n", rule_line("="), "SPPT Summary\n", rule_line("="), sep = "")
+  cat(field_lines("Base", s$base_name))
+  cat(field_lines("Test", s$test_name))
+  cat(field_lines("Units", sprintf("%d (%d eligible, %d empty in both)",
+                                   s$n_units, s$n_eligible, s$n_zero)))
+  cat(field_lines("lambda_min", sprintf("%.3f", s$lambda_min)))
+  cat(field_lines("Bootstrap B", s$B))
   if (!is.null(s$alpha) && !is.na(s$s_index_pv))
-    cat(sprintf("  Robust S-index   : %.4f  (alpha = %.3f; %d dissimilar)\n",
-                s$s_index_pv, s$alpha, s$n_sig_pv))
-  if (!is.null(s$sameness) && !is.na(s$sameness$p_value)) {
-    cat(sprintf("  Sameness test    : p %s  (expected S = %.4f, SE = %.4f, %s)\n",
-                fmt_p(s$sameness$p_value), s$sameness$s_expected,
-                s$sameness$se, s$sameness$method))
-    cat(sprintf("  Sameness cut-off : S >= %.4f at tau = %.2f  [%s]\n",
-                s$sameness$threshold, s$sameness$tau,
-                if (isTRUE(s$sameness$same)) "same" else "different"))
-  }
+    cat(field_lines("Robust S", sprintf("%.4f (alpha = %.3f; %d differ)",
+                                        s$s_index_pv, s$alpha, s$n_sig_pv)))
+  if (!is.null(s$sameness) && !is.na(s$sameness$p_value))
+    cat(field_lines("Sameness", sprintf(
+      "p %s (%s); S >= %.4f needed at tau = %.2f [%s]",
+      fmt_p(s$sameness$p_value), s$sameness$method, s$sameness$threshold,
+      s$sameness$tau, if (isTRUE(s$sameness$same)) "same" else "different")))
   if (!is.null(s$conf_level) && !is.na(s$s_index_ci))
-    cat(sprintf("  Robust CI-index  : %.4f  (CI = %.1f%%; %d dissimilar)\n",
-                s$s_index_ci, s$conf_level * 100, s$n_sig_ci))
+    cat(field_lines("Robust S (CI)", sprintf("%.4f (CI = %.1f%%; %d differ)",
+                                             s$s_index_ci, s$conf_level * 100,
+                                             s$n_sig_ci)))
   if (!is.null(s$arrangement)) {
-    cat(sprintf("  Arrangement      : Moran's I = %+.4f on signed evidence, p %s\n",
-                s$arrangement$moran_I, fmt_p(s$arrangement$moran_p)))
-    cat(sprintf("  Local clusters   : %d (%s > %s), %d (%s > %s)\n",
-                s$arrangement$n_hh, s$test_name, s$base_name,
-                s$arrangement$n_ll, s$base_name, s$test_name))
+    cat(field_lines("Arrangement", sprintf(
+      "Moran's I = %+.3f on signed evidence, p %s",
+      s$arrangement$moran_I, fmt_p(s$arrangement$moran_p))))
+    cat(field_lines("Clusters", sprintf(
+      "%d units %s > %s; %d units %s > %s", s$arrangement$n_hh, s$test_name,
+      s$base_name, s$arrangement$n_ll, s$base_name, s$test_name)))
     if (!is.null(s$arrangement$n_core))
-      cat(sprintf("  Flagged by tier  : %d core, %d edge, %d outside%s\n",
-                  s$arrangement$n_core, s$arrangement$n_edge,
-                  s$arrangement$n_outside,
-                  if (isTRUE(s$widespread_shift)) " (widespread shift)"
-                  else ""))
+      cat(field_lines("Tiers", sprintf(
+        "%d core, %d edge, %d outside%s", s$arrangement$n_core,
+        s$arrangement$n_edge, s$arrangement$n_outside,
+        if (isTRUE(s$widespread_shift)) " (widespread shift)" else "")))
   }
-  cat(sprintf("  Decision tier    : %s\n", s$decision_tier))
-  cat("==================================================================\n\n")
+  if (!is.null(s$sameness) && !is.na(s$sameness$p_value) &&
+      !is.null(s$arrangement))
+    cat(field_lines("Verdict", verdict_label(
+      !isTRUE(s$sameness$same), isTRUE(s$arrangement$clustered),
+      isTRUE(s$widespread_shift))))
+  cat(field_lines("Decision tier", s$decision_tier))
+  cat(rule_line("="), "\n", sep = "")
   invisible(s)
 }
 

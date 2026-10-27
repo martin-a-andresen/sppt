@@ -44,6 +44,12 @@
   roughly 10 to 15).
 * Help pages note where the implementation differs from the published
   descriptions of the method.
+* Console reports and `summary()` output are wrapped to fit 70 columns, and
+  the two-way verdict is printed in summaries.
+* A failed arrangement test now gives a warning rather than a message, so
+  missing tiers cannot pass unnoticed.
+* `title = FALSE` in `sppt_map()` and `plot()` removes the subtitle as well
+  as the title.
 
 # sppt 1.0.0
 
