@@ -52,7 +52,10 @@ The console report gives:
 * the **sameness test**, which asks whether that S index is lower than two
   realisations of one process would give;
 * the **arrangement test**, Moran's I on the signed evidence surface, which
-  asks whether the differences cluster in space.
+  asks whether the differences cluster in space;
+* the **confidence tiers** of the flagged units (core, edge, outside);
+* a **two-way verdict** that reads the count and arrangement results
+  together.
 
 `summary()` repeats the key results at any time.
 
@@ -72,11 +75,44 @@ The p-value is the bounded Monte Carlo form $p = (1 + r)/(B + 1)$, so it is
 never exactly zero; with `B = 999` the smallest possible value is 0.001.
 `B = 4999` (the default) is recommended for final analyses.
 
+## Reading the map at fine scales
+
+At census tracts most flagged units are trustworthy individually. At finer
+units, power falls and false discoveries rise, but the errors behave
+differently: false positives are scattered, while genuine differences hold
+together. Two tools use that.
+
+**Confidence tiers.** Each flagged unit is placed in a tier: *core* if it
+lies inside a local Moran cluster of the same direction, *edge* if it
+borders a core unit with the same sign, and *outside* otherwise. All three
+are significant at `alpha`; the tiers rank how much to trust them.
+
+```{r tiers}
+res_da <- sppt(vancouver_da, group_col = "id",
+               count_col = c("BNER2021", "BNEC2021"),
+               B = 999, seed = 42, verbose = FALSE, create_maps = FALSE)
+table(res_da$confidence_tier, res_da$sig_pvalue_dir)
+```
+
+```{r tier-map, fig.height = 6}
+plot(res_da, "tiers")
+```
+
+**Cluster test.** `sppt_clusters()` groups flagged units into clusters and
+compares their sizes with the clusters that false positives alone form on
+the same map. A cluster above the ceiling is a pattern chance is unlikely to
+produce, even where its individual units are uncertain.
+
+```{r clusters}
+sppt_clusters(res_da, rule = "one_gap", nsim = 499, seed = 1)
+```
+
 ## Maps
 
-With `create_maps = TRUE` (the default), `sppt()` prints a difference map and
-a significance map and stores both on the result. `sppt_map()` redraws them,
-with the legend, north arrow and scale bar wherever suits your study area.
+With `create_maps = TRUE` (the default), `sppt()` prints a difference map, a
+significance map and, with the arrangement test, a confidence tier map, and
+stores them on the result. `sppt_map()` and `plot()` redraw them, with the
+legend, north arrow and scale bar wherever suits your study area.
 
 ```{r map}
 sppt_map(res, "pvalue")
@@ -125,7 +161,7 @@ res <- sppt(
   arrangement        = TRUE,    # Moran's I on the signed evidence surface
   nsim_moran         = 999,     # permutations for global Moran's I
   calculate_ci       = FALSE,   # also compute marginal CI overlap (2009)
-  conf_level         = 0.683,   # CI level; matches alpha = 0.05
+  conf_level         = 0.85,    # CI level; about alpha = 0.05
   fix_base           = FALSE,   # TRUE = do not bootstrap the base pattern
   use_percentages    = TRUE,    # percentages (0-100) rather than proportions
   verbose            = TRUE,    # print the console report
@@ -144,9 +180,17 @@ res <- sppt(
 
 The original test (Andresen 2009) compared bootstrap confidence intervals.
 `calculate_ci = TRUE` adds that method alongside the p-values, using the same
-bootstrap replicates. The default `conf_level = 0.683` (about one standard
-deviation per tail) matches the performance of `alpha = 0.05` p-values; 0.95
-reproduces the original, more conservative analysis.
+bootstrap replicates. Two marginal intervals at the default
+`conf_level = 0.85` fail to overlap when the difference exceeds about 2.04
+standard errors, which corresponds to a two-sample test at about
+`alpha = 0.05`; 0.95 reproduces the original, more conservative analysis.
+
+### Multiple testing corrections
+
+`sppt()` applies none. At fine scales corrections remove nearly all power,
+and at coarse scales a stricter `alpha` does the same job. The raw p-values
+are returned, so `p.adjust()` can be applied to `res$pvalue` if a reviewer
+insists, but the sameness test is then no longer calibrated.
 
 ### Fixed base
 

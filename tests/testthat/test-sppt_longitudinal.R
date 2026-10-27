@@ -41,3 +41,19 @@ test_that("fewer than three periods is an error", {
                                  count_col = c("BNER2003", "BNER2004")),
                "at least 3")
 })
+
+test_that("longitudinal results have a class with summary and plot", {
+  res <- sppt_longitudinal(vancouver_ct, group_col = "id",
+                           count_col = paste0("BNER", 2003:2006),
+                           B = 99, seed = 1, verbose = FALSE,
+                           create_maps = FALSE, create_time_plot = FALSE)
+  expect_s3_class(res, "sppt_long_result")
+  expect_s3_class(res, "sf")
+  expect_output(s <- summary(res), "Longitudinal SPPT Summary")
+  expect_equal(unname(s$indices$pvalue["all", "overlap"]),
+               attr(res, "si_overlap_p"))
+  expect_identical(formals(sppt_longitudinal)$conf_level, 0.85)
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
+  expect_s3_class(plot(res), "ggplot")
+})

@@ -58,7 +58,7 @@ write_result <- function(result, dir, stem, format) {
          "'. Use one of: gpkg, shp, csv, txt, rds.", call. = FALSE)
   )
   plain <- result
-  class(plain) <- setdiff(class(plain), "sppt_result")
+  class(plain) <- setdiff(class(plain), c("sppt_result", "sppt_long_result"))
   if (fmt %in% c("gpkg", "shp")) {
     sf::st_write(plain, fp, delete_dsn = TRUE, quiet = TRUE)
   } else if (fmt %in% c("csv", "txt")) {

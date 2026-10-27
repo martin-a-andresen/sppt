@@ -18,5 +18,6 @@ bibentry(
   journal = "Annals of the American Association of Geographers",
   year    = "2026",
   note    = "In press",
+  doi     = "10.1080/24694452.2026.2733304",
   header  = "To cite sppt_longitudinal(), please also use:"
 )

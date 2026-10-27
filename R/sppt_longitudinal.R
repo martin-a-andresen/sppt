@@ -34,8 +34,10 @@
 #'   that results for several crime types can sit in one object. `NULL`
 #'   (default) derives it from `count_col`, for example `"BNER_"`.
 #' @param conf_level Numeric in (0, 1). Confidence level of the bootstrap
-#'   envelopes. Default `0.683` (about one standard deviation per tail), which
-#'   matches `alpha = 0.05` p-value performance.
+#'   envelopes. Default `0.85`: two marginal 85% intervals fail to overlap
+#'   when the difference exceeds about 2.04 standard errors, which
+#'   corresponds to a two-sample test at about `alpha = 0.05` (Andresen
+#'   2026).
 #' @param fix_base Logical. If `TRUE`, the base period is not bootstrapped and
 #'   its observed shares are treated as fixed (the approach of earlier
 #'   longitudinal applications). Not recommended for standard use. Default
@@ -76,7 +78,8 @@
 #' @param export_results Logical. Write the result to `export_dir`. Default
 #'   `FALSE`.
 #'
-#' @return An `sf` object containing the columns of `data` plus, for each
+#' @return An `sf` object of class `sppt_long_result` containing the
+#'   columns of `data` plus, for each
 #'   period, `<count_col>_L` and `<count_col>_U` (envelope bounds) and, with
 #'   p-values, `pvalue_<count_col>` (`NA` for the base period). Unit-level
 #'   results are named with `prefix`:
@@ -109,13 +112,21 @@
 #' attributes (for example `attr(x, "s_index_overlap")`,
 #' `attr(x, "interval_table_linear")`, `attr(x, "pvalue_matrix")`). With
 #' `create_maps = TRUE` the maps are stored as a named list of `ggplot`
-#' objects in `attr(x, "sppt_maps")`; use [sppt_map()] to redraw them with a
-#' different layout.
+#' objects in `attr(x, "sppt_maps")`; use [sppt_map()] or `plot()` to redraw
+#' them with a different layout. `summary()` prints the S indices and trend
+#' counts.
+#'
+#' **Relation to the published description.** Andresen (2026) gives the
+#' p-value as \eqn{r/B}; this implementation uses the bounded form
+#' \eqn{(1 + r)/(B + 1)}, as in [sppt()], so no p-value is exactly zero. The
+#' bundled `vancouver_da` data have 1,016 dissemination areas, so results
+#' differ slightly from the 1,019 units analysed there.
 #'
 #' @references
 #' Andresen, M.A. (2026). Testing longitudinal change in spatial
 #' distributions and patterns: An extension of the spatial point pattern
 #' test. *Annals of the American Association of Geographers*, in press.
+#' \doi{10.1080/24694452.2026.2733304}
 #'
 #' @seealso [sppt()], [sppt_map()], [vancouver_ct]
 #' @examples
@@ -136,7 +147,7 @@ sppt_longitudinal <- function(data,
                               seed                = NULL,
                               alpha               = 0.05,
                               calculate_pvalues   = TRUE,
-                              conf_level          = 0.683,
+                              conf_level          = 0.85,
                               fix_base            = FALSE,
                               use_percentages     = TRUE,
                               prefix              = NULL,
@@ -719,7 +730,11 @@ sppt_longitudinal <- function(data,
   }
   attr(result, "sppt_long_meta") <- list(
     prefix = prefix, trend_type = trend_type, alpha = alpha,
-    calculate_pvalues = calculate_pvalues, count_col = count_col)
+    calculate_pvalues = calculate_pvalues, count_col = count_col,
+    conf_level = conf_level, trend_alpha = trend_alpha, B = B,
+    n_units = N, nonzero_units = nonzero_obs, jenks_k = jenks_k,
+    totals = stats::setNames(as.numeric(totals_vec), count_col))
+  class(result) <- c("sppt_long_result", class(result))
 
   # ---------------------------------------------------------------------------
   # Maps
@@ -1132,4 +1147,100 @@ write_long_tables <- function(fp, time_periods, totals_vec, T_, trend_type,
     }
   }
   invisible(fp)
+}
+
+#' Summarise a longitudinal SPPT result
+#'
+#' Prints the settings, the S indices and the trend classification counts
+#' of a [sppt_longitudinal()] result.
+#'
+#' @param object,x An object of class `sppt_long_result`, as returned by
+#'   [sppt_longitudinal()].
+#' @param ... Further arguments passed to the `sf` method.
+#' @return `summary()` invisibly returns a list with the settings, the
+#'   S indices (all units and units with at least one event) and the trend
+#'   counts. `print()` invisibly returns `x`.
+#' @examples
+#' \donttest{
+#' res <- sppt_longitudinal(vancouver_ct, group_col = "id",
+#'                          count_col = paste0("BNER", 2003:2010),
+#'                          B = 199, seed = 42, verbose = FALSE,
+#'                          create_maps = FALSE, create_time_plot = FALSE)
+#' summary(res)
+#' }
+#' @export
+summary.sppt_long_result <- function(object, ...) {
+  meta <- attr(object, "sppt_long_meta")
+  if (is.null(meta)) return(NextMethod())
+  col <- function(nm) paste0(meta$prefix, nm)
+  idx <- function(stem) {
+    nm <- c("overlap", "average", "sustained", "combined")
+    stats::setNames(vapply(nm, function(k) {
+      v <- attr(object, paste0(stem, k, if (grepl("^robust_si_|^si_", stem)) "_p" else ""))
+      if (is.null(v)) NA_real_ else v
+    }, numeric(1)), nm)
+  }
+  env_all <- idx("s_index_")
+  env_rob <- idx("robust_s_index_")
+  p_all <- if (isTRUE(meta$calculate_pvalues)) idx("si_") else NULL
+  p_rob <- if (isTRUE(meta$calculate_pvalues)) idx("robust_si_") else NULL
+  trend_env <- table(factor(object[[col("Trend")]]))
+  trend_p <- if (isTRUE(meta$calculate_pvalues))
+    table(factor(object[[col("Trend_p")]])) else NULL
+
+  cc <- meta$count_col
+  cat("\n")
+  cat("==================================================================\n")
+  cat("Longitudinal SPPT Summary\n")
+  cat("==================================================================\n")
+  cat(sprintf("  Periods          : %d (%s to %s; base %s)\n", length(cc),
+              cc[1], cc[length(cc)], cc[1]))
+  cat(sprintf("  Spatial units    : %d  (%d with at least one event)\n",
+              meta$n_units, meta$nonzero_units))
+  cat(sprintf("  Bootstrap B      : %d\n", meta$B))
+  cat(sprintf("  Envelope level   : %.1f%%\n", meta$conf_level * 100))
+  if (isTRUE(meta$calculate_pvalues))
+    cat(sprintf("  P-value alpha    : %.3f\n", meta$alpha))
+  cat(sprintf("  Trend            : %s, alpha = %.3f\n", meta$trend_type,
+              meta$trend_alpha))
+  cat("------------------------------------------------------------------\n")
+  cat("                     all units          units with events\n")
+  row <- function(lbl, a, b)
+    cat(sprintf("  %-18s %8.4f           %8.4f\n", lbl, a, b))
+  if (!is.null(p_all)) {
+    cat("  P-value indices\n")
+    row("  stable (S)", p_all["overlap"], p_rob["overlap"])
+    row("  average", p_all["average"], p_rob["average"])
+    row("  sustained zero", p_all["sustained"], p_rob["sustained"])
+    row("  combined", p_all["combined"], p_rob["combined"])
+  }
+  cat("  Envelope indices\n")
+  row("  stable (S)", env_all["overlap"], env_rob["overlap"])
+  row("  average", env_all["average"], env_rob["average"])
+  row("  sustained zero", env_all["sustained"], env_rob["sustained"])
+  row("  combined", env_all["combined"], env_rob["combined"])
+  cat("------------------------------------------------------------------\n")
+  show_tab <- function(lbl, tb)
+    cat(sprintf("  %-18s %s\n", lbl,
+                paste(sprintf("%s: %d", names(tb), as.integer(tb)),
+                      collapse = "  ")))
+  if (!is.null(trend_p)) show_tab("Trend_p codes", trend_p)
+  show_tab("Trend codes", trend_env)
+  cat("  (see ?sppt_longitudinal for the trend codes)\n")
+  cat("==================================================================\n\n")
+
+  invisible(list(meta = meta,
+                 indices = list(envelope = rbind(all = env_all,
+                                                 robust = env_rob),
+                                pvalue = if (!is.null(p_all))
+                                  rbind(all = p_all, robust = p_rob)),
+                 trend = list(envelope = trend_env, pvalue = trend_p)))
+}
+
+#' @rdname summary.sppt_long_result
+#' @export
+print.sppt_long_result <- function(x, ...) {
+  summary(x)
+  NextMethod()
+  invisible(x)
 }

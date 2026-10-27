@@ -15,7 +15,8 @@
 #' @param result A result returned by [sppt()] or [sppt_longitudinal()].
 #' @param which Character vector of map names. `NULL` (default) returns every
 #'   map available for the result. For [sppt()] results: `"difference"`,
-#'   `"pvalue"` and `"ci"`. For [sppt_longitudinal()] results:
+#'   `"pvalue"`, `"tiers"` (confidence tiers; needs the arrangement test) and
+#'   `"ci"`. For [sppt_longitudinal()] results:
 #'   `"overlap"`, `"s_index_average"`, `"sustained_zero"`, `"trend_all"`,
 #'   `"trend_linear_sig"`, `"linear_r2"`, `"linear_slope"`, `"quad_r2"`,
 #'   `"quad_trend"`, and the p-value versions `"p_overlap"`,
@@ -83,6 +84,45 @@ sppt_map <- function(result, which = NULL, legend_position = NULL,
   if (length(which) == 1L) maps[[which]] else maps[which]
 }
 
+#' Plot an SPPT result
+#'
+#' Draws one of the maps stored with a [sppt()] or [sppt_longitudinal()]
+#' result. A thin wrapper around [sppt_map()], so every layout argument of
+#' that function can be passed here.
+#'
+#' @param x A result returned by [sppt()] or [sppt_longitudinal()].
+#' @param which Name of the map to draw. Defaults to `"pvalue"` for [sppt()]
+#'   results and `"p_trend"` for [sppt_longitudinal()] results (`"trend_all"`
+#'   when p-values were not computed). See [sppt_map()] for every name.
+#' @param ... Layout arguments passed to [sppt_map()], such as
+#'   `legend_position`, `north_arrow`, `scale_bar`, `crs` and `title`.
+#' @return The `ggplot` object, invisibly, after printing it.
+#' @seealso [sppt_map()]
+#' @examples
+#' res <- sppt(vancouver_ct, group_col = "id",
+#'             count_col = c("BNER2003", "BNER2025"),
+#'             B = 199, seed = 42, verbose = FALSE, create_maps = FALSE)
+#' plot(res)
+#' plot(res, "tiers", legend_position = "right")
+#' @export
+plot.sppt_result <- function(x, which = "pvalue", ...) {
+  p <- sppt_map(x, which = which[1L], ...)
+  print(p)
+  invisible(p)
+}
+
+#' @rdname plot.sppt_result
+#' @export
+plot.sppt_long_result <- function(x, which = NULL, ...) {
+  if (is.null(which)) {
+    meta <- attr(x, "sppt_long_meta")
+    which <- if (isTRUE(meta$calculate_pvalues)) "p_trend" else "trend_all"
+  }
+  p <- sppt_map(x, which = which[1L], ...)
+  print(p)
+  invisible(p)
+}
+
 # -- Layout helpers -----------------------------------------------------------
 
 check_location <- function(x, arg) {
@@ -146,8 +186,18 @@ drop_title <- function(p, keep) {
 }
 
 strip_sppt_class <- function(x) {
-  class(x) <- setdiff(class(x), "sppt_result")
+  class(x) <- setdiff(class(x), c("sppt_result", "sppt_long_result"))
   x
+}
+
+# Dissolve the outlined units of one direction into a single boundary, so a
+# cluster is drawn by its outer edge rather than by every unit border.
+dissolve_units <- function(x, idx) {
+  if (!length(idx)) return(NULL)
+  g <- tryCatch(
+    sf::st_union(sf::st_make_valid(sf::st_geometry(x[idx, ]))),
+    error = function(e) sf::st_geometry(x[idx, ]))
+  sf::st_sf(geometry = g)
 }
 
 # -- Maps for sppt() ----------------------------------------------------------
@@ -186,7 +236,6 @@ build_maps_sppt <- function(result, map_crs = NULL, layout = list()) {
   carto <- list(north_arrow_layer(layout$north_arrow %||% "tr"),
                 scale_bar_layer(layout$scale_bar %||% "bl", 0.35))
 
-  fmt_p <- function(p) if (p < 0.0001) "< 0.0001" else sprintf("= %.4f", p)
   vs <- paste0("Base: ", base_name, "  |  Test: ", test_name)
   lv <- c(paste0(test_name, " > ", base_name),
           paste0(base_name, " > ", test_name),
@@ -231,25 +280,77 @@ build_maps_sppt <- function(result, map_crs = NULL, layout = list()) {
                                    arr$n_ll, base_name, test_name))
     }
 
+    # Unit borders are light and thin so the cluster boundaries read at fine
+    # scales, where many small units would otherwise form a mesh.
+    unit_col <- "gray70"
+    unit_lwd <- 0.1
+    cl_up <- if ("moran_hh" %in% names(rm))
+      dissolve_units(rm, which(rm$moran_hh)) else NULL
+    cl_dn <- if ("moran_ll" %in% names(rm))
+      dissolve_units(rm, which(rm$moran_ll)) else NULL
+    add_clusters <- function(p) {
+      # Solid = test > base, dashed = base > test
+      if (!is.null(cl_up))
+        p <- p + ggplot2::geom_sf(data = cl_up, inherit.aes = FALSE,
+                                  fill = NA, colour = "red",
+                                  linewidth = 0.8, linetype = "solid")
+      if (!is.null(cl_dn))
+        p <- p + ggplot2::geom_sf(data = cl_dn, inherit.aes = FALSE,
+                                  fill = NA, colour = "red",
+                                  linewidth = 0.8, linetype = "22")
+      p
+    }
+
     p <- ggplot2::ggplot(rm) +
       ggplot2::geom_sf(ggplot2::aes(fill = .data[["sig_label"]]),
-                       colour = "gray50", linewidth = 0.2) +
+                       colour = unit_col, linewidth = unit_lwd) +
       ggplot2::scale_fill_manual(values = sig_colors, name = "Pattern",
-                                 na.value = "gray80", drop = FALSE) +
-      carto + base_theme + legend_2row +
+                                 na.value = "gray80", drop = FALSE)
+    maps$pvalue <- add_clusters(p) + carto + base_theme + legend_2row +
       ggplot2::labs(title = sprintf("P-value Significance  (alpha = %.3f)",
                                     s$alpha),
                     subtitle = sub)
-    # Outline local clusters: solid = test > base, dashed = base > test
-    if ("moran_hh" %in% names(rm) && any(rm$moran_hh))
-      p <- p + ggplot2::geom_sf(data = rm[which(rm$moran_hh), ], fill = NA,
-                                colour = "red", linewidth = 0.55,
-                                linetype = "solid")
-    if ("moran_ll" %in% names(rm) && any(rm$moran_ll))
-      p <- p + ggplot2::geom_sf(data = rm[which(rm$moran_ll), ], fill = NA,
-                                colour = "red", linewidth = 0.55,
-                                linetype = "22")
-    maps$pvalue <- p
+
+    # Confidence tiers: fill carries tier and direction, and each legend key
+    # carries its count, so an empty category reads as (0).
+    if ("confidence_tier" %in% names(rm)) {
+      up <- lv[1]
+      dn <- lv[2]
+      tl <- c(paste("Core:", up), paste("Edge:", up), paste("Outside:", up),
+              "Not significant",
+              paste("Core:", dn), paste("Edge:", dn), paste("Outside:", dn),
+              lv[4])
+      dr  <- rm$sig_pvalue_dir
+      lab <- ifelse(is.na(dr), lv[4],
+             ifelse(dr == 0L, "Not significant",
+                    paste0(tools::toTitleCase(rm$confidence_tier), ": ",
+                           ifelse(dr == 1L, up, dn))))
+      rm$tier_label <- factor(lab, levels = tl)
+      tier_n <- table(rm$tier_label)
+      tier_keys <- stats::setNames(
+        paste0(tl, " (", as.integer(tier_n[tl]), ")"), tl)
+      tier_colors <- stats::setNames(
+        c("#b2182b", "#ef8a62", "#fddbc7", "white",
+          "#2166ac", "#67a9cf", "#d1e5f0", "gray90"), tl)
+      arr <- s$arrangement
+      pt <- ggplot2::ggplot(rm) +
+        ggplot2::geom_sf(ggplot2::aes(fill = .data[["tier_label"]]),
+                         colour = unit_col, linewidth = unit_lwd) +
+        ggplot2::scale_fill_manual(values = tier_colors,
+                                   labels = tier_keys,
+                                   name = "Flagged units",
+                                   na.value = "gray80", drop = FALSE)
+      maps$tiers <- add_clusters(pt) + carto + base_theme +
+        ggplot2::guides(fill = ggplot2::guide_legend(
+          ncol = 2, byrow = FALSE, title.position = "top")) +
+        ggplot2::labs(
+          title = sprintf("Confidence Tiers  (alpha = %.3f)", s$alpha),
+          subtitle = paste0(
+            vs,
+            sprintf("\nCore %d, edge %d, outside %d", arr$n_core,
+                    arr$n_edge, arr$n_outside),
+            "\nCore = inside a cluster; edge = borders a core unit, same sign"))
+    }
   }
 
   # CI significance

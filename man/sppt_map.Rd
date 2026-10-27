@@ -19,7 +19,8 @@ sppt_map(
 
 \item{which}{Character vector of map names. \code{NULL} (default) returns every
 map available for the result. For \code{\link[=sppt]{sppt()}} results: \code{"difference"},
-\code{"pvalue"} and \code{"ci"}. For \code{\link[=sppt_longitudinal]{sppt_longitudinal()}} results:
+\code{"pvalue"}, \code{"tiers"} (confidence tiers; needs the arrangement test) and
+\code{"ci"}. For \code{\link[=sppt_longitudinal]{sppt_longitudinal()}} results:
 \code{"overlap"}, \code{"s_index_average"}, \code{"sustained_zero"}, \code{"trend_all"},
 \code{"trend_linear_sig"}, \code{"linear_r2"}, \code{"linear_slope"}, \code{"quad_r2"},
 \code{"quad_trend"}, and the p-value versions \code{"p_overlap"},
