@@ -35,17 +35,13 @@
 #' Locations are never permuted, so the null is sampling variability around
 #' the observed intensity surface, not spatial randomness.
 #'
-#' **Multiple testing.** No correction is applied by default. Simulation
-#' evidence shows that corrections remove power at fine spatial scales
-#' without a meaningful benefit in false discovery rate, and that at coarse
-#' scales a stricter `alpha` achieves the same as a correction. The sameness
-#' and arrangement tests address the global question instead. Corrections
-#' remain available through `correction` so that earlier analyses can be
-#' reproduced; with a correction, `pvalue` holds the raw p-values,
-#' `pvalue_adj` the adjusted ones, and units are flagged on the adjusted
-#' values. Note that family-wise corrections can be inoperative rather than
-#' merely conservative: Bonferroni rejects nothing whenever the number of
-#' units exceeds \eqn{\alpha(B + 1)}, however strong the evidence.
+#' **Multiple testing.** No correction is applied. Simulation evidence
+#' shows that corrections remove power at fine spatial scales without a
+#' meaningful benefit in false discovery rate, and that at coarse scales a
+#' stricter `alpha` achieves the same as a correction. The sameness and
+#' arrangement tests and [sppt_clusters()] address the global question
+#' instead. The raw p-values are returned, so a correction can still be
+#' applied with [stats::p.adjust()] if required.
 #'
 #' **Power.** `lambda_min`, the mean number of events per unit in the rarer
 #' pattern, governs power. Below 1.5 a low-power warning is issued and below
@@ -101,11 +97,6 @@
 #'   Requires polygon geometry. Default `TRUE`.
 #' @param nsim_moran Integer. Permutations for the global Moran's I test.
 #'   Default `999`.
-#' @param correction Character. Multiple testing correction, passed to
-#'   [stats::p.adjust()]: `"none"` (default, recommended), `"BH"`, `"BY"`,
-#'   `"bonferroni"`, `"holm"`, `"hochberg"` or `"hommel"`. Any other choice
-#'   issues a warning and suppresses the sameness test, whose null flagging
-#'   rate is `alpha` only without a correction.
 #' @param calculate_ci Logical. Also compute marginal bootstrap confidence
 #'   intervals and the CI-based S index (Andresen 2009). Default `FALSE`.
 #' @param conf_level Numeric in (0, 1). Confidence level for the interval
@@ -152,12 +143,10 @@
 #'   \item{`low_power_warning`}{`TRUE` when `lambda_min < 1.5`.}
 #'   \item{`pvalue`}{Bootstrap p-value; `NA` for units empty in both
 #'     patterns.}
-#'   \item{`pvalue_adj`}{Adjusted p-value (only with a `correction`).}
-#'   \item{`sig_pvalue`}{1 if the unit is flagged at `alpha`, otherwise 0.}
+#'   \item{`sig_pvalue`}{1 if `pvalue <= alpha`, otherwise 0.}
 #'   \item{`sig_pvalue_dir`}{1 = test > base, -1 = base > test, 0 = not
 #'     significant.}
-#'   \item{`signed_evidence`}{\eqn{\mathrm{sign}(d) \times -\log_{10}(p)},
-#'     from the raw p-value.}
+#'   \item{`signed_evidence`}{\eqn{\mathrm{sign}(d) \times -\log_{10}(p)}.}
 #'   \item{`moran_hh`, `moran_ll`, `moran_cluster`}{Local Moran clusters of
 #'     the signed evidence surface (arrangement test only).}
 #'   \item{`confidence_tier`}{`"core"`, `"edge"` or `"outside"` for flagged
@@ -210,7 +199,6 @@ sppt <- function(data,
                  sameness_tau       = 0.05,
                  arrangement        = TRUE,
                  nsim_moran         = 999L,
-                 correction         = "none",
                  calculate_ci       = FALSE,
                  conf_level         = 0.85,
                  fix_base           = FALSE,
@@ -268,20 +256,6 @@ sppt <- function(data,
   if (!is.numeric(nsim_moran) || length(nsim_moran) != 1L || nsim_moran < 99L)
     stop("`nsim_moran` must be a single integer >= 99.", call. = FALSE)
   nsim_moran <- as.integer(nsim_moran)
-
-  valid_corrections <- c("none", "BH", "BY", "bonferroni", "holm",
-                         "hochberg", "hommel")
-  if (!is.character(correction) || length(correction) != 1L ||
-      !correction %in% valid_corrections)
-    stop("`correction` must be one of: ",
-         paste(valid_corrections, collapse = ", "), ".", call. = FALSE)
-  if (correction != "none")
-    warning(
-      "Multiple testing corrections are not recommended for SPPT. ",
-      "Simulation evidence shows that corrections remove power at fine ",
-      "spatial scales without a meaningful benefit in false discovery rate. ",
-      "Proceeding with correction = '", correction, "' as requested.",
-      call. = FALSE)
 
   if (!is.numeric(conf_level) || length(conf_level) != 1L ||
       conf_level <= 0 || conf_level >= 1)
@@ -371,8 +345,6 @@ sppt <- function(data,
   say(sprintf("  Bootstrap B   : %d\n", B))
   if (calculate_pvalues)
     say(sprintf("  P-value alpha : %.3f\n", alpha))
-  if (calculate_pvalues && correction != "none")
-    say(sprintf("  Correction    : %s\n", correction))
   if (calculate_ci)
     say(sprintf("  CI level      : %.1f%%  (marginal overlap criterion)\n",
                 conf_level * 100))
@@ -420,7 +392,6 @@ sppt <- function(data,
 
   # -- 7. Bootstrap p-values --------------------------------------------------
   pvalue     <- rep(NA_real_, n_units)
-  pvalue_adj <- rep(NA_real_, n_units)
   sig_pvalue <- rep(NA_integer_, n_units)
   sig_pv_dir <- rep(NA_integer_, n_units)
 
@@ -434,16 +405,7 @@ sppt <- function(data,
       abs(boot_diffs_c[active, , drop = FALSE]) >= abs(obs_diff[active])
     )) / (B + 1)
 
-    # Flags use the adjusted p-values under a correction; the raw p-values
-    # are kept for the evidence surface and for reporting.
-    p_flag <- pvalue
-    if (correction != "none") {
-      pvalue_adj[active] <- stats::p.adjust(pvalue[active],
-                                            method = correction)
-      p_flag <- pvalue_adj
-    }
-
-    sig_pvalue[active] <- as.integer(p_flag[active] <= alpha)
+    sig_pvalue[active] <- as.integer(pvalue[active] <= alpha)
     sig_pv_dir[active] <- ifelse(sig_pvalue[active] == 1L,
                                  as.integer(sign(obs_diff[active])), 0L)
   }
@@ -487,10 +449,9 @@ sppt <- function(data,
   if (calculate_pvalues && valid_bootstrap && n_eligible > 0L) {
     n_sig_pv   <- sum(sig_pvalue[!zero_mask] == 1L, na.rm = TRUE)
     s_index_pv <- 1 - n_sig_pv / n_eligible
-    # Calibrated only for uncorrected p-values under the symmetric bootstrap:
-    # a correction moves the null flagging rate away from alpha, and
-    # fix_base = TRUE breaks it at sparse units.
-    if (correction == "none" && !fix_base)
+    # Only calibrated under the symmetric bootstrap: fix_base = TRUE breaks
+    # the null flagging rate at sparse units.
+    if (!fix_base)
       sameness <- sppt_sameness(s_index_pv, n_sig_pv, n_eligible, alpha,
                                 tau = sameness_tau)
   }
@@ -550,7 +511,6 @@ sppt <- function(data,
 
   if (calculate_pvalues) {
     result$pvalue          <- round(pvalue, 6)
-    if (correction != "none") result$pvalue_adj <- round(pvalue_adj, 6)
     result$sig_pvalue      <- sig_pvalue
     result$sig_pvalue_dir  <- sig_pv_dir
     result$signed_evidence <- round(
@@ -595,13 +555,8 @@ sppt <- function(data,
     if (n_eligible < n_units * 0.75)
       say("    Note          : many units empty in both patterns; the sameness\n",
           "                    test is conservative here.\n", sep = "")
-  } else if (calculate_pvalues && !is.na(s_index_pv)) {
-    if (correction != "none")
-      say("  Sameness test   : not reported (the null flagging rate is not\n",
-          "                    alpha under a multiple testing correction).\n",
-          sep = "")
-    else if (fix_base)
-      say("  Sameness test   : not reported (not calibrated for fix_base = TRUE).\n")
+  } else if (calculate_pvalues && !is.na(s_index_pv) && fix_base) {
+    say("  Sameness test   : not reported (not calibrated for fix_base = TRUE).\n")
   }
 
   if (calculate_ci && !is.na(s_index_ci)) {
@@ -671,7 +626,6 @@ sppt <- function(data,
     lambda_min       = lambda_min,
     B                = B,
     alpha            = if (calculate_pvalues) alpha else NULL,
-    correction       = correction,
     s_index_pv       = s_index_pv,
     n_sig_pv         = n_sig_pv,
     sameness         = sameness,
@@ -832,8 +786,6 @@ summary.sppt_result <- function(object, ...) {
               s$n_units, s$n_eligible, s$n_zero))
   cat(sprintf("  lambda_min       : %.3f\n", s$lambda_min))
   cat(sprintf("  Bootstrap B      : %d\n", s$B))
-  if (!is.null(s$correction) && s$correction != "none")
-    cat(sprintf("  Correction       : %s\n", s$correction))
   if (!is.null(s$alpha) && !is.na(s$s_index_pv))
     cat(sprintf("  Robust S-index   : %.4f  (alpha = %.3f; %d dissimilar)\n",
                 s$s_index_pv, s$alpha, s$n_sig_pv))

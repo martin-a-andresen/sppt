@@ -68,13 +68,8 @@ test_that("cluster outlines carry the sign of their label", {
   expect_true(all(res$difference[res$moran_ll] < 0))
 })
 
-test_that("a correction keeps raw p-values and drops the sameness test", {
-  res <- suppressWarnings(run_sppt(arrangement = FALSE, correction = "BH"))
-  expect_true(all(res$pvalue_adj >= res$pvalue, na.rm = TRUE))
-  expect_null(attr(res, "sppt_summary")$sameness)
-  expect_warning(run_sppt(arrangement = FALSE, correction = "BH"),
-                 "not recommended")
-  expect_error(run_sppt(correction = "fdr"), "correction")
+test_that("sppt() has no correction argument", {
+  expect_false("correction" %in% names(formals(sppt)))
 })
 
 test_that("conf_level defaults to 0.85", {
@@ -95,7 +90,7 @@ test_that("plot draws the tier map", {
 
 test_that("sppt_clusters labels clusters consistently", {
   res <- run_sppt()
-  cl <- sppt_clusters(res, nsim = 99, seed = 1)
+  cl <- sppt_clusters(res, direction = FALSE, nsim = 99, seed = 1)
   expect_s3_class(cl, "sppt_clusters")
   flagged <- !is.na(res$sig_pvalue_dir) & res$sig_pvalue_dir != 0L
   expect_identical(!is.na(cl$membership), flagged)
@@ -104,7 +99,7 @@ test_that("sppt_clusters labels clusters consistently", {
   expect_false(is.unsorted(rev(cl$ceiling$min_size)))
   expect_output(print(cl), "Ceiling")
   # Clusters within direction are never larger than undirected ones
-  cd <- sppt_clusters(res, direction = TRUE, nsim = 99, seed = 1)
+  cd <- sppt_clusters(res, nsim = 99, seed = 1)
   expect_true(all(cd$clusters$direction != "mixed"))
   expect_lte(max(cd$clusters$size), max(cl$clusters$size))
 })

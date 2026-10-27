@@ -8,7 +8,7 @@
 sppt_clusters(
   result,
   rule = c("one_gap", "contiguous"),
-  direction = FALSE,
+  direction = TRUE,
   level = 0.05,
   null_count = c("fixed", "binomial"),
   max_clusters = 6L,
@@ -24,7 +24,7 @@ sppt_clusters(
 \item{rule}{\code{"one_gap"} (default) or \code{"contiguous"}. See Details.}
 
 \item{direction}{Logical. Build clusters within each direction of
-difference only. Default \code{FALSE}.}
+difference only. Default \code{TRUE}.}
 
 \item{level}{Numeric in (0, 1). Probability that chance reaches the
 ceiling. Default \code{0.05}.}
@@ -84,12 +84,14 @@ cluster only if they share a border or a corner (queen contiguity). Under
 kind, which suits fine units, where real spatial processes rarely produce
 solid blocks. One-gap clusters are larger, so their ceilings are higher.
 
-\strong{Direction.} With \code{direction = FALSE} (default), flagged units join
-regardless of the sign of their difference, as in the simulation that
-produced the published reference thresholds. With \code{direction = TRUE}
-only units of the same sign join, and the null assigns each chance flag a
-random sign; a cluster then corresponds to a directional pattern
-("test > base" or "base > test") and its ceiling is lower.
+\strong{Direction.} With \code{direction = TRUE} (default) only flagged units with
+the same sign of difference join, and the null assigns each chance flag a
+random sign. Each cluster is then a directional pattern ("test > base" or
+"base > test"); without this, the one-gap rule can merge neighbouring
+areas of opposite difference into a single uninformative cluster. With
+\code{direction = FALSE} units join regardless of sign, as in the simulation
+that produced the published reference values; directional ceilings are
+lower because chance flags of one sign are half as dense.
 
 \strong{Number of chance flags.} With \code{null_count = "fixed"} (default) each
 draw flags exactly \code{round(alpha * n)} of the \code{n} eligible units, the
@@ -110,15 +112,12 @@ level \code{level}. A map with no cluster above its ceiling is not evidence of
 no difference: power may be too low.
 
 \strong{Reference values.} For Vancouver, \code{alpha = 0.05}, the one-gap rule
-and undirected clusters, the published single-cluster ceilings are about
+and undirected clusters (\code{direction = FALSE}), the published
+single-cluster ceilings are about
 11 units at dissemination areas, 9 at 15 ha hexagons, 7 at 30 ha
 hexagons and 5 at census tracts. Ceilings depend on the number of units
 and on how they connect, which is why they are simulated here for each
 map rather than taken from a table.
-
-Units flagged under a multiple testing correction do not have a null
-flagging rate of \code{alpha}, so a warning is issued and the ceiling should be
-treated as approximate.
 }
 \examples{
 res <- sppt(vancouver_ct, group_col = "id",

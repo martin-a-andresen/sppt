@@ -24,12 +24,14 @@
 #' kind, which suits fine units, where real spatial processes rarely produce
 #' solid blocks. One-gap clusters are larger, so their ceilings are higher.
 #'
-#' **Direction.** With `direction = FALSE` (default), flagged units join
-#' regardless of the sign of their difference, as in the simulation that
-#' produced the published reference thresholds. With `direction = TRUE`
-#' only units of the same sign join, and the null assigns each chance flag a
-#' random sign; a cluster then corresponds to a directional pattern
-#' ("test > base" or "base > test") and its ceiling is lower.
+#' **Direction.** With `direction = TRUE` (default) only flagged units with
+#' the same sign of difference join, and the null assigns each chance flag a
+#' random sign. Each cluster is then a directional pattern ("test > base" or
+#' "base > test"); without this, the one-gap rule can merge neighbouring
+#' areas of opposite difference into a single uninformative cluster. With
+#' `direction = FALSE` units join regardless of sign, as in the simulation
+#' that produced the published reference values; directional ceilings are
+#' lower because chance flags of one sign are half as dense.
 #'
 #' **Number of chance flags.** With `null_count = "fixed"` (default) each
 #' draw flags exactly `round(alpha * n)` of the `n` eligible units, the
@@ -50,20 +52,17 @@
 #' no difference: power may be too low.
 #'
 #' **Reference values.** For Vancouver, `alpha = 0.05`, the one-gap rule
-#' and undirected clusters, the published single-cluster ceilings are about
+#' and undirected clusters (`direction = FALSE`), the published
+#' single-cluster ceilings are about
 #' 11 units at dissemination areas, 9 at 15 ha hexagons, 7 at 30 ha
 #' hexagons and 5 at census tracts. Ceilings depend on the number of units
 #' and on how they connect, which is why they are simulated here for each
 #' map rather than taken from a table.
 #'
-#' Units flagged under a multiple testing correction do not have a null
-#' flagging rate of `alpha`, so a warning is issued and the ceiling should be
-#' treated as approximate.
-#'
 #' @param result A result returned by [sppt()] with p-values.
 #' @param rule `"one_gap"` (default) or `"contiguous"`. See Details.
 #' @param direction Logical. Build clusters within each direction of
-#'   difference only. Default `FALSE`.
+#'   difference only. Default `TRUE`.
 #' @param level Numeric in (0, 1). Probability that chance reaches the
 #'   ceiling. Default `0.05`.
 #' @param null_count `"fixed"` (default) or `"binomial"`: how many units
@@ -105,7 +104,7 @@
 #'
 #' @export
 sppt_clusters <- function(result, rule = c("one_gap", "contiguous"),
-                          direction = FALSE, level = 0.05,
+                          direction = TRUE, level = 0.05,
                           null_count = c("fixed", "binomial"),
                           max_clusters = 6L, nsim = 999L, seed = NULL) {
   if (!inherits(result, "sppt_result"))
@@ -127,10 +126,6 @@ sppt_clusters <- function(result, rule = c("one_gap", "contiguous"),
 
   s <- attr(result, "sppt_summary")
   alpha <- s$alpha
-  if (!is.null(s$correction) && s$correction != "none")
-    warning("Units were flagged under a multiple testing correction, so ",
-            "the null flagging rate is not alpha; treat the ceiling as ",
-            "approximate.", call. = FALSE)
 
   dir_obs  <- result$sig_pvalue_dir
   eligible <- !is.na(dir_obs)

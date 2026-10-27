@@ -20,14 +20,12 @@
   and lie outside any cluster) and adds it to the two-way verdict.
 * New `sppt_clusters()` tests clusters of flagged units against the
   clusters that false positives alone produce on the same map, under the
-  one-gap or contiguous rule.
+  one-gap or contiguous rule. Clusters are built within each direction of
+  difference by default; `direction = FALSE` reproduces the published
+  reference values.
 * `plot()` methods for `sppt()` and `sppt_longitudinal()` results.
 * `sppt_longitudinal()` results now have class `sppt_long_result`, with
   `summary()` and `print()` methods.
-* `sppt()` gains `correction` for multiple testing corrections, kept for
-  reproducing earlier analyses and not recommended. Raw p-values stay in
-  `pvalue`, adjusted ones go in `pvalue_adj`, and the sameness test is not
-  reported under a correction.
 
 ## Bug fixes
 

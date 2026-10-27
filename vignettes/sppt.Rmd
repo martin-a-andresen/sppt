@@ -160,7 +160,6 @@ res <- sppt(
   sameness_tau       = 0.05,    # significance level of the sameness test
   arrangement        = TRUE,    # Moran's I on the signed evidence surface
   nsim_moran         = 999,     # permutations for global Moran's I
-  correction         = "none",  # multiple testing correction (not advised)
   calculate_ci       = FALSE,   # also compute marginal CI overlap (2009)
   conf_level         = 0.85,    # CI level; about alpha = 0.05
   fix_base           = FALSE,   # TRUE = do not bootstrap the base pattern
@@ -188,10 +187,10 @@ standard errors, which corresponds to a two-sample test at about
 
 ### Multiple testing corrections
 
-`correction = "BH"` and the other methods of `p.adjust()` are available to
-reproduce earlier analyses, but are not recommended: at fine scales they
-remove nearly all power, and at coarse scales a stricter `alpha` does the
-same job. The sameness test is not reported under a correction.
+`sppt()` applies none. At fine scales corrections remove nearly all power,
+and at coarse scales a stricter `alpha` does the same job. The raw p-values
+are returned, so `p.adjust()` can be applied to `res$pvalue` if a reviewer
+insists, but the sameness test is then no longer calibrated.
 
 ### Fixed base
 

@@ -15,7 +15,6 @@ sppt(
   sameness_tau = 0.05,
   arrangement = TRUE,
   nsim_moran = 999L,
-  correction = "none",
   calculate_ci = FALSE,
   conf_level = 0.85,
   fix_base = FALSE,
@@ -63,12 +62,6 @@ Requires polygon geometry. Default \code{TRUE}.}
 
 \item{nsim_moran}{Integer. Permutations for the global Moran's I test.
 Default \code{999}.}
-
-\item{correction}{Character. Multiple testing correction, passed to
-\code{\link[stats:p.adjust]{stats::p.adjust()}}: \code{"none"} (default, recommended), \code{"BH"}, \code{"BY"},
-\code{"bonferroni"}, \code{"holm"}, \code{"hochberg"} or \code{"hommel"}. Any other choice
-issues a warning and suppresses the sameness test, whose null flagging
-rate is \code{alpha} only without a correction.}
 
 \item{calculate_ci}{Logical. Also compute marginal bootstrap confidence
 intervals and the CI-based S index (Andresen 2009). Default \code{FALSE}.}
@@ -129,12 +122,10 @@ for every row).}
 \item{\code{low_power_warning}}{\code{TRUE} when \code{lambda_min < 1.5}.}
 \item{\code{pvalue}}{Bootstrap p-value; \code{NA} for units empty in both
 patterns.}
-\item{\code{pvalue_adj}}{Adjusted p-value (only with a \code{correction}).}
-\item{\code{sig_pvalue}}{1 if the unit is flagged at \code{alpha}, otherwise 0.}
+\item{\code{sig_pvalue}}{1 if \code{pvalue <= alpha}, otherwise 0.}
 \item{\code{sig_pvalue_dir}}{1 = test > base, -1 = base > test, 0 = not
 significant.}
-\item{\code{signed_evidence}}{\eqn{\mathrm{sign}(d) \times -\log_{10}(p)},
-from the raw p-value.}
+\item{\code{signed_evidence}}{\eqn{\mathrm{sign}(d) \times -\log_{10}(p)}.}
 \item{\code{moran_hh}, \code{moran_ll}, \code{moran_cluster}}{Local Moran clusters of
 the signed evidence surface (arrangement test only).}
 \item{\code{confidence_tier}}{\code{"core"}, \code{"edge"} or \code{"outside"} for flagged
@@ -188,17 +179,13 @@ multinomial distribution of observed shares is the closed-form equivalent.
 Locations are never permuted, so the null is sampling variability around
 the observed intensity surface, not spatial randomness.
 
-\strong{Multiple testing.} No correction is applied by default. Simulation
-evidence shows that corrections remove power at fine spatial scales
-without a meaningful benefit in false discovery rate, and that at coarse
-scales a stricter \code{alpha} achieves the same as a correction. The sameness
-and arrangement tests address the global question instead. Corrections
-remain available through \code{correction} so that earlier analyses can be
-reproduced; with a correction, \code{pvalue} holds the raw p-values,
-\code{pvalue_adj} the adjusted ones, and units are flagged on the adjusted
-values. Note that family-wise corrections can be inoperative rather than
-merely conservative: Bonferroni rejects nothing whenever the number of
-units exceeds \eqn{\alpha(B + 1)}, however strong the evidence.
+\strong{Multiple testing.} No correction is applied. Simulation evidence
+shows that corrections remove power at fine spatial scales without a
+meaningful benefit in false discovery rate, and that at coarse scales a
+stricter \code{alpha} achieves the same as a correction. The sameness and
+arrangement tests and \code{\link[=sppt_clusters]{sppt_clusters()}} address the global question
+instead. The raw p-values are returned, so a correction can still be
+applied with \code{\link[stats:p.adjust]{stats::p.adjust()}} if required.
 
 \strong{Power.} \code{lambda_min}, the mean number of events per unit in the rarer
 pattern, governs power. Below 1.5 a low-power warning is issued and below
