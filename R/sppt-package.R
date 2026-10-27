@@ -41,7 +41,11 @@ field_lines <- function(label, text, width = 70L, label_width = 14L) {
   pad   <- strrep(" ", label_width + 5L)
   first <- if (nzchar(label))
     sprintf("  %-*s : ", label_width, label) else pad
-  body  <- strwrap(as.character(text), width = width - nchar(pad))
+  # Keep comparisons such as "alpha = 0.05" on one line: the spaces around
+  # them are swapped for a printable placeholder while wrapping.
+  text  <- gsub(" (=|<=|>=|<|>) ", "~\\1~", as.character(text))
+  body  <- gsub("~", " ", strwrap(text, width = width - nchar(pad)),
+                fixed = TRUE)
   if (!length(body)) body <- ""
   paste0(c(first, rep(pad, length(body) - 1L)), body, "\n", collapse = "")
 }
