@@ -18,7 +18,7 @@ test_that("results are reproducible with a seed", {
 })
 
 test_that("summary works with and without the arrangement test", {
-  expect_output(summary(run_sppt(arrangement = FALSE)), "Robust S-index")
+  expect_output(summary(run_sppt(arrangement = FALSE)), "Robust S")
   expect_output(summary(run_sppt()), "Arrangement")
 })
 
@@ -97,9 +97,20 @@ test_that("sppt_clusters labels clusters consistently", {
   expect_equal(as.integer(table(cl$membership)), cl$clusters$size)
   expect_false(is.unsorted(rev(cl$clusters$size)))
   expect_false(is.unsorted(rev(cl$ceiling$min_size)))
-  expect_output(print(cl), "Ceiling")
+  expect_output(print(cl), "ceiling")
   # Clusters within direction are never larger than undirected ones
   cd <- sppt_clusters(res, nsim = 99, seed = 1)
   expect_true(all(cd$clusters$direction != "mixed"))
   expect_lte(max(cd$clusters$size), max(cl$clusters$size))
+})
+
+test_that("console output fits in 70 columns", {
+  wide <- function(x) max(nchar(strsplit(paste(x, collapse = "\n"), "\n")[[1]]))
+  out <- capture.output(res <- suppressWarnings(sppt(
+    vancouver_da, group_col = "id", count_col = c("BNER2021", "BNEC2021"),
+    B = 199, seed = 1, create_maps = FALSE)))
+  expect_lte(wide(out), 70)
+  expect_lte(wide(capture.output(summary(res))), 70)
+  expect_lte(wide(capture.output(print(sppt_clusters(res, nsim = 99,
+                                                     seed = 1)))), 70)
 })

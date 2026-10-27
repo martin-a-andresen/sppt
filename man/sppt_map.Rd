@@ -45,8 +45,8 @@ for \code{\link[=sppt_longitudinal]{sppt_longitudinal()}} maps.}
 \item{crs}{CRS to project the maps to, passed to \code{\link[sf:st_transform]{sf::st_transform()}}.
 \code{NULL} keeps the CRS of the result.}
 
-\item{title}{Logical. Keep the map titles. \code{FALSE} removes them, as
-journals usually require. Default \code{TRUE}.}
+\item{title}{Logical. Keep the map titles and subtitles. \code{FALSE} removes
+both, as journals usually require. Default \code{TRUE}.}
 }
 \value{
 A \code{ggplot} object when \code{which} names a single map, otherwise a
