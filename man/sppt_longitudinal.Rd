@@ -162,8 +162,9 @@ linear direction (1, -1, 0).}
 \item{\code{Quad_R2}, \code{Quad_b0}, \code{Quad_bt}, \code{Quad_bt2}, \code{Quad_Sig}}{Quadratic
 fit and the sign of a significant quadratic term (quadratic only).}
 \item{\verb{*_p} versions}{The same quantities gated on p-value significance:
-\code{intervals_overlap_p}, \code{max_overlap_proportion_p} (share of
-non-significant periods), \code{prop_sig_p}, \code{sustained_zero_p}, \code{Trend_p},
+\code{intervals_overlap_p}, \code{max_overlap_proportion_p} (share of the
+\eqn{T - 1} test periods not significantly different from the base),
+\code{prop_sig_p} (share that are), \code{sustained_zero_p}, \code{Trend_p},
 \code{Trend_p_All}, \code{Trend_p_Linear_Sig}, \code{Linear_p_R2}, \code{Linear_p_b0},
 \code{Linear_p_bt}, \code{Linear_p_bt_sig}, \code{Quad_p_R2}, \code{Quad_p_b0},
 \code{Quad_p_bt}, \code{Quad_p_bt2}, \code{Quad_p_Sig}.}

@@ -100,8 +100,9 @@
 #'   \item{`Quad_R2`, `Quad_b0`, `Quad_bt`, `Quad_bt2`, `Quad_Sig`}{Quadratic
 #'     fit and the sign of a significant quadratic term (quadratic only).}
 #'   \item{`*_p` versions}{The same quantities gated on p-value significance:
-#'     `intervals_overlap_p`, `max_overlap_proportion_p` (share of
-#'     non-significant periods), `prop_sig_p`, `sustained_zero_p`, `Trend_p`,
+#'     `intervals_overlap_p`, `max_overlap_proportion_p` (share of the
+#'     \eqn{T - 1} test periods not significantly different from the base),
+#'     `prop_sig_p` (share that are), `sustained_zero_p`, `Trend_p`,
 #'     `Trend_p_All`, `Trend_p_Linear_Sig`, `Linear_p_R2`, `Linear_p_b0`,
 #'     `Linear_p_bt`, `Linear_p_bt_sig`, `Quad_p_R2`, `Quad_p_b0`,
 #'     `Quad_p_bt`, `Quad_p_bt2`, `Quad_p_Sig`.}
@@ -552,8 +553,11 @@ sppt_longitudinal <- function(data,
       is_sig[, t] <- as.integer(!is.na(pvalue_matrix[, t]) &
                                   pvalue_matrix[, t] <= alpha)
     result[[pv("intervals_overlap_p")]]      <- as.integer(rowSums(is_sig) == 0)
-    result[[pv("max_overlap_proportion_p")]] <- 1 - rowMeans(is_sig)
-    result[[pv("prop_sig_p")]]               <- rowMeans(is_sig)
+    # Shares are over the T - 1 test periods: the base period is never
+    # compared with itself, so it is left out of the denominator.
+    n_sig_t <- rowSums(is_sig[, -1L, drop = FALSE])
+    result[[pv("max_overlap_proportion_p")]] <- 1 - n_sig_t / (T_ - 1L)
+    result[[pv("prop_sig_p")]]               <- n_sig_t / (T_ - 1L)
     result[[pv("sustained_zero_p")]]         <- result[[pv("sustained_zero")]]
 
     say("Calculating p-value trends...\n")
