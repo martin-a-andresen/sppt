@@ -48,6 +48,12 @@ significantly. The **envelope** results use bootstrap confidence intervals: a
 unit is stable when all its intervals overlap. For units that are not stable,
 a trend is fitted to the unit's share of events over time.
 
+`summary()` gives the S indices and trend counts at a glance.
+
+```{r}
+summary(res)
+```
+
 ```{r}
 # Share of units with no significant change in any period
 attr(res, "si_overlap_p")
@@ -117,7 +123,7 @@ res <- sppt_longitudinal(
   seed                = NULL,       # set for reproducible results
   alpha               = 0.05,       # unit-level significance level
   calculate_pvalues   = TRUE,       # p-value results alongside envelopes
-  conf_level          = 0.683,      # envelope level; matches alpha = 0.05
+  conf_level          = 0.85,       # envelope level; about alpha = 0.05
   fix_base            = FALSE,      # TRUE = do not bootstrap the base period
   use_percentages     = TRUE,       # shares (0-100) rather than counts
   prefix              = NULL,       # output prefix; NULL derives "BNER_"

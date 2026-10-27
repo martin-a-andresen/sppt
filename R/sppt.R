@@ -16,7 +16,8 @@
 #' * an **arrangement test**, global Moran's I on the signed evidence surface
 #'   \eqn{\mathrm{sign}(d) \times -\log_{10}(p)}, which asks whether the
 #'   differences, however many there are, are spatially organised. Local
-#'   Moran clusters are outlined on the p-value map.
+#'   Moran clusters are outlined on the p-value map, and each flagged unit is
+#'   given a confidence tier from its position relative to those clusters.
 #'
 #' @details
 #' **P-values.** For each unit the observed difference in proportions
@@ -28,15 +29,55 @@
 #' p-value is therefore \eqn{1/(B + 1)}. Units with no events in either
 #' pattern are excluded from inference and receive `NA`.
 #'
-#' No multiple testing correction is applied. Simulation evidence shows that
-#' corrections remove power at fine spatial scales without a meaningful
-#' benefit in false discovery rate; the sameness and arrangement tests
-#' address the global question instead.
+#' The bootstrap resamples events at their observed locations and
+#' re-aggregates them to the areal units; drawing counts from the
+#' multinomial distribution of observed shares is the closed-form equivalent.
+#' Locations are never permuted, so the null is sampling variability around
+#' the observed intensity surface, not spatial randomness.
+#'
+#' **Multiple testing.** No correction is applied by default. Simulation
+#' evidence shows that corrections remove power at fine spatial scales
+#' without a meaningful benefit in false discovery rate, and that at coarse
+#' scales a stricter `alpha` achieves the same as a correction. The sameness
+#' and arrangement tests address the global question instead. Corrections
+#' remain available through `correction` so that earlier analyses can be
+#' reproduced; with a correction, `pvalue` holds the raw p-values,
+#' `pvalue_adj` the adjusted ones, and units are flagged on the adjusted
+#' values. Note that family-wise corrections can be inoperative rather than
+#' merely conservative: Bonferroni rejects nothing whenever the number of
+#' units exceeds \eqn{\alpha(B + 1)}, however strong the evidence.
 #'
 #' **Power.** `lambda_min`, the mean number of events per unit in the rarer
 #' pattern, governs power. Below 1.5 a low-power warning is issued and below
-#' 0.5 a critical warning; at those resolutions, interpret groups of adjacent
-#' flagged units rather than isolated ones, or aggregate to coarser units.
+#' 0.5 a critical warning; at those resolutions, read core and edge units
+#' rather than isolated flags, test the clusters with [sppt_clusters()], or
+#' aggregate to coarser units.
+#'
+#' **Confidence tiers.** With `arrangement = TRUE`, each flagged unit is
+#' placed in one tier:
+#' * `"core"`: inside a local Moran outline of the same direction;
+#' * `"edge"`: not core, but sharing a border (queen contiguity) with a core
+#'   unit whose difference has the same sign;
+#' * `"outside"`: any other flagged unit.
+#'
+#' Every tier is significant at `alpha`; the tiers add spatial context and
+#' rank confidence, they do not certify a difference as real. In simulation
+#' (21 crime type pairs, 7 spatial scales, 200 iterations, `alpha = 0.05`,
+#' medians across pairs) the share of flagged units that were true
+#' differences was 0.34 to 0.88 among all flagged units, 0.85 to 0.98 among
+#' core units and 0.81 to 0.97 among core plus edge units. Edge units are
+#' least informative when one direction dominates, because a widespread
+#' shift places flagged units next to clusters by chance; the console notes
+#' this case.
+#'
+#' Local Moran classifies units around the mean of the signed surface, so a
+#' unit is outlined as "test > base" only if its own difference is positive,
+#' and as "base > test" only if it is negative.
+#'
+#' **Relation to published descriptions.** The original test (Andresen 2009)
+#' compared confidence intervals only; p-values, the sameness and
+#' arrangement tests and the tiers are later additions. The p-value here is
+#' the bounded form \eqn{(1 + r)/(B + 1)} rather than \eqn{r/B}.
 #'
 #' @param data An `sf` object with one row per spatial unit.
 #' @param group_col Character. Name of the column that uniquely identifies
@@ -47,23 +88,32 @@
 #'   value avoids ties.
 #' @param seed Integer or `NULL`. Random seed for reproducibility.
 #' @param alpha Numeric in (0, 1). Significance level for flagging a unit.
-#'   Default `0.05`.
+#'   Default `0.05`. Where control of false discoveries is the priority and
+#'   the analysis is at census tracts or an equally coarse scale
+#'   (`lambda_min` above roughly 10 to 15), use `0.01`.
 #' @param calculate_pvalues Logical. Compute bootstrap p-values. Default
 #'   `TRUE`.
 #' @param sameness_tau Numeric in (0, 1). Significance level for the sameness
 #'   test on the robust S index. Separate from `alpha`, which governs the
 #'   flagging of individual units. Default `0.05`.
 #' @param arrangement Logical. Run the arrangement test (global and local
-#'   Moran's I on the signed evidence surface). Requires polygon geometry.
-#'   Default `TRUE`.
+#'   Moran's I on the signed evidence surface) and assign confidence tiers.
+#'   Requires polygon geometry. Default `TRUE`.
 #' @param nsim_moran Integer. Permutations for the global Moran's I test.
 #'   Default `999`.
+#' @param correction Character. Multiple testing correction, passed to
+#'   [stats::p.adjust()]: `"none"` (default, recommended), `"BH"`, `"BY"`,
+#'   `"bonferroni"`, `"holm"`, `"hochberg"` or `"hommel"`. Any other choice
+#'   issues a warning and suppresses the sameness test, whose null flagging
+#'   rate is `alpha` only without a correction.
 #' @param calculate_ci Logical. Also compute marginal bootstrap confidence
 #'   intervals and the CI-based S index (Andresen 2009). Default `FALSE`.
 #' @param conf_level Numeric in (0, 1). Confidence level for the interval
-#'   overlap criterion. Default `0.683` (about one standard deviation per
-#'   tail), which matches `alpha = 0.05` p-value performance. Only used when
-#'   `calculate_ci = TRUE`.
+#'   overlap criterion. Default `0.85`: two marginal 85% intervals fail to
+#'   overlap when the difference exceeds about 2.04 standard errors, which
+#'   corresponds to a two-sample test at about `alpha = 0.05` (Andresen
+#'   2026). `0.95` reproduces the original, more conservative analysis. Only
+#'   used when `calculate_ci = TRUE`.
 #' @param fix_base Logical. If `TRUE`, the base pattern is not bootstrapped
 #'   and its observed proportions are treated as fixed. This gives an
 #'   asymmetric test, intended only for comparison against a known reference
@@ -102,12 +152,16 @@
 #'   \item{`low_power_warning`}{`TRUE` when `lambda_min < 1.5`.}
 #'   \item{`pvalue`}{Bootstrap p-value; `NA` for units empty in both
 #'     patterns.}
-#'   \item{`sig_pvalue`}{1 if `pvalue <= alpha`, otherwise 0.}
+#'   \item{`pvalue_adj`}{Adjusted p-value (only with a `correction`).}
+#'   \item{`sig_pvalue`}{1 if the unit is flagged at `alpha`, otherwise 0.}
 #'   \item{`sig_pvalue_dir`}{1 = test > base, -1 = base > test, 0 = not
 #'     significant.}
-#'   \item{`signed_evidence`}{\eqn{\mathrm{sign}(d) \times -\log_{10}(p)}.}
+#'   \item{`signed_evidence`}{\eqn{\mathrm{sign}(d) \times -\log_{10}(p)},
+#'     from the raw p-value.}
 #'   \item{`moran_hh`, `moran_ll`, `moran_cluster`}{Local Moran clusters of
 #'     the signed evidence surface (arrangement test only).}
+#'   \item{`confidence_tier`}{`"core"`, `"edge"` or `"outside"` for flagged
+#'     units, `NA` otherwise (arrangement test only).}
 #'   \item{`ci_lower`, `ci_upper`, `ci_lower_test`, `ci_upper_test`}{Marginal
 #'     confidence bounds for base and test (CI only).}
 #'   \item{`intervals_overlap`}{1 = intervals overlap (similar), 0 = they do
@@ -115,10 +169,11 @@
 #'   \item{`sig_ci_dir`}{Direction of CI-based differences (CI only).}
 #' }
 #' The attribute `"sppt_summary"` holds the robust S index, the sameness and
-#' arrangement tests and the settings; `summary()` prints it. The attribute
-#' `"sppt_maps"` holds the maps as a named list of `ggplot` objects
-#' (`difference`, `pvalue` and, with CI, `ci`); use [sppt_map()] to redraw
-#' them with a different layout.
+#' arrangement tests, the tier counts and the settings; `summary()` prints
+#' it. The attribute `"sppt_maps"` holds the maps as a named list of
+#' `ggplot` objects (`difference`, `pvalue`, `tiers` with the arrangement
+#' test, and `ci` with CI); use [sppt_map()] or `plot()` to redraw them with
+#' a different layout.
 #'
 #' @references
 #' Andresen, M.A. (2009). Testing for similarity in area-based spatial
@@ -129,14 +184,20 @@
 #' test: The test, its applications, and the future. *Methodological
 #' Innovations*, 9, Article 12. \doi{10.1177/2059799116630659}
 #'
-#' @seealso [sppt_longitudinal()], [sppt_sameness()], [sppt_map()],
-#'   [vancouver_ct]
+#' Andresen, M.A. (2026). Testing longitudinal change in spatial
+#' distributions and patterns: An extension of the spatial point pattern
+#' test. *Annals of the American Association of Geographers*, in press.
+#' \doi{10.1080/24694452.2026.2733304}
+#'
+#' @seealso [sppt_longitudinal()], [sppt_sameness()], [sppt_clusters()],
+#'   [sppt_map()], [vancouver_ct]
 #' @examples
 #' res <- sppt(vancouver_ct, group_col = "id",
 #'             count_col = c("BNER2003", "BNER2025"),
 #'             B = 199, seed = 42, create_maps = FALSE)
 #' summary(res)
 #' table(res$sig_pvalue_dir)
+#' table(res$confidence_tier, useNA = "ifany")
 #'
 #' @export
 sppt <- function(data,
@@ -149,8 +210,9 @@ sppt <- function(data,
                  sameness_tau       = 0.05,
                  arrangement        = TRUE,
                  nsim_moran         = 999L,
+                 correction         = "none",
                  calculate_ci       = FALSE,
-                 conf_level         = 0.683,
+                 conf_level         = 0.85,
                  fix_base           = FALSE,
                  use_percentages    = TRUE,
                  verbose            = TRUE,
@@ -207,6 +269,20 @@ sppt <- function(data,
     stop("`nsim_moran` must be a single integer >= 99.", call. = FALSE)
   nsim_moran <- as.integer(nsim_moran)
 
+  valid_corrections <- c("none", "BH", "BY", "bonferroni", "holm",
+                         "hochberg", "hommel")
+  if (!is.character(correction) || length(correction) != 1L ||
+      !correction %in% valid_corrections)
+    stop("`correction` must be one of: ",
+         paste(valid_corrections, collapse = ", "), ".", call. = FALSE)
+  if (correction != "none")
+    warning(
+      "Multiple testing corrections are not recommended for SPPT. ",
+      "Simulation evidence shows that corrections remove power at fine ",
+      "spatial scales without a meaningful benefit in false discovery rate. ",
+      "Proceeding with correction = '", correction, "' as requested.",
+      call. = FALSE)
+
   if (!is.numeric(conf_level) || length(conf_level) != 1L ||
       conf_level <= 0 || conf_level >= 1)
     stop("`conf_level` must be a single numeric value in (0, 1).",
@@ -251,13 +327,13 @@ sppt <- function(data,
   lambda_min <- min(N_a, N_b) / n_units
 
   decision_tier <- if (lambda_min >= 17) {
-    "Coarse scale (lambda_min >= 17): CI and PV methods both reliable."
+    "Coarse scale (lambda_min >= 17): CI and PV methods both reliable.\n    PV alpha = 0.05; FDR-priority use alpha = 0.01."
   } else if (lambda_min >= 6) {
-    "Medium-high scale (6 <= lambda_min < 17): PV alpha = 0.05 recommended."
+    "Medium-high scale (6 <= lambda_min < 17): PV alpha = 0.05 recommended;\n    FDR-priority use alpha = 0.01 once lambda_min is above about 10."
   } else if (lambda_min >= 1.5) {
-    "Medium scale (1.5 <= lambda_min < 6): PV alpha = 0.05 recommended;\n    FDR-priority use alpha = 0.01."
+    "Medium scale (1.5 <= lambda_min < 6): PV alpha = 0.05 recommended."
   } else if (lambda_min >= 0.5) {
-    "Fine scale (0.5 <= lambda_min < 1.5): Power is limited; interpret\n    grouped detections rather than individual units."
+    "Fine scale (0.5 <= lambda_min < 1.5): Power is limited; interpret\n    core and edge units rather than isolated flags."
   } else {
     "Very fine scale (lambda_min < 0.5): All methods have severely limited\n    power. Consider aggregating to a coarser spatial unit."
   }
@@ -277,8 +353,9 @@ sppt <- function(data,
       "power is limited. P-values will be computed but should be interpreted\n",
       "cautiously. What the test detects at this resolution is more spatially\n",
       "coherent than chance, while false positives are scattered: interpret\n",
-      "groups of adjacent flagged units rather than isolated ones, or\n",
-      "aggregate to a coarser spatial unit where lambda_min >= 1.5."),
+      "core and edge units (column confidence_tier) rather than isolated\n",
+      "flags, test the clusters with sppt_clusters(), or aggregate to a\n",
+      "coarser spatial unit where lambda_min >= 1.5."),
       lambda_min), call. = FALSE)
   }
 
@@ -294,6 +371,8 @@ sppt <- function(data,
   say(sprintf("  Bootstrap B   : %d\n", B))
   if (calculate_pvalues)
     say(sprintf("  P-value alpha : %.3f\n", alpha))
+  if (calculate_pvalues && correction != "none")
+    say(sprintf("  Correction    : %s\n", correction))
   if (calculate_ci)
     say(sprintf("  CI level      : %.1f%%  (marginal overlap criterion)\n",
                 conf_level * 100))
@@ -313,6 +392,8 @@ sppt <- function(data,
 
   # -- 6. Shared bootstrap ----------------------------------------------------
   # One multinomial draw per variable, B replicates, shared by CI and PV.
+  # Drawing counts from the multinomial of observed shares is the closed form
+  # of resampling events at their observed locations and re-aggregating.
   if (N_a == 0L || N_b == 0L) {
     warning("One or both count columns sum to zero. No inference possible.",
             call. = FALSE)
@@ -339,6 +420,7 @@ sppt <- function(data,
 
   # -- 7. Bootstrap p-values --------------------------------------------------
   pvalue     <- rep(NA_real_, n_units)
+  pvalue_adj <- rep(NA_real_, n_units)
   sig_pvalue <- rep(NA_integer_, n_units)
   sig_pv_dir <- rep(NA_integer_, n_units)
 
@@ -352,7 +434,16 @@ sppt <- function(data,
       abs(boot_diffs_c[active, , drop = FALSE]) >= abs(obs_diff[active])
     )) / (B + 1)
 
-    sig_pvalue[active] <- as.integer(pvalue[active] <= alpha)
+    # Flags use the adjusted p-values under a correction; the raw p-values
+    # are kept for the evidence surface and for reporting.
+    p_flag <- pvalue
+    if (correction != "none") {
+      pvalue_adj[active] <- stats::p.adjust(pvalue[active],
+                                            method = correction)
+      p_flag <- pvalue_adj
+    }
+
+    sig_pvalue[active] <- as.integer(p_flag[active] <= alpha)
     sig_pv_dir[active] <- ifelse(sig_pvalue[active] == 1L,
                                  as.integer(sign(obs_diff[active])), 0L)
   }
@@ -396,9 +487,10 @@ sppt <- function(data,
   if (calculate_pvalues && valid_bootstrap && n_eligible > 0L) {
     n_sig_pv   <- sum(sig_pvalue[!zero_mask] == 1L, na.rm = TRUE)
     s_index_pv <- 1 - n_sig_pv / n_eligible
-    # Only calibrated under the symmetric bootstrap: fix_base = TRUE breaks
-    # the null flagging rate at sparse units.
-    if (!fix_base)
+    # Calibrated only for uncorrected p-values under the symmetric bootstrap:
+    # a correction moves the null flagging rate away from alpha, and
+    # fix_base = TRUE breaks it at sparse units.
+    if (correction == "none" && !fix_base)
       sameness <- sppt_sameness(s_index_pv, n_sig_pv, n_eligible, alpha,
                                 tau = sameness_tau)
   }
@@ -412,60 +504,40 @@ sppt <- function(data,
     s_index_ci <- 1 - n_sig_ci / n_eligible
   }
 
-  # -- 10. Spatial arrangement of the p-value surface -------------------------
-  # Under sameness the per-unit p-values are uniform and independent, so the
-  # signed surface sign(difference) x -log10(p) carries no spatial structure.
-  # High-high marks clusters of "test > base", low-low clusters of
-  # "base > test". Zero-zero units are dropped rather than filled, since a
-  # block of identical filled values would itself register as
-  # autocorrelation.
+  # -- 10. Spatial arrangement and confidence tiers ---------------------------
+  # Under sameness the per-unit p-values are uniform, so the signed surface
+  # sign(difference) x -log10(p) carries no spatial structure. High-high marks
+  # clusters of "test > base", low-low clusters of "base > test". Zero-zero
+  # units are dropped rather than filled, since a block of identical filled
+  # values would itself register as autocorrelation.
   arrange_res <- NULL
   if (isTRUE(arrangement) && calculate_pvalues && valid_bootstrap &&
       n_eligible > 2L) {
-    arrange_res <- tryCatch({
-      nb_all <- spdep::poly2nb(data, queen = TRUE)
-      keep   <- !zero_mask
-      nb_sub <- subset(nb_all, keep)
-      lw     <- spdep::nb2listw(nb_sub, style = "W", zero.policy = TRUE)
-      # The bounded p-value caps this at -log10(1/(B+1)); the pmax is a guard
-      # that should never bind.
-      surf <- sign(obs_diff[keep]) *
-        -log10(pmax(pvalue[keep], .Machine$double.eps))
+    arrange_res <- tryCatch(
+      arrangement_test(data, obs_diff, pvalue, zero_mask, sig_pv_dir,
+                       nsim_moran),
+      error = function(e) {
+        message("Arrangement test failed: ", conditionMessage(e))
+        NULL
+      })
+  }
 
-      gm <- spdep::moran.mc(surf, lw, nsim = nsim_moran,
-                            zero.policy = TRUE, alternative = "greater")
-
-      lm_res <- spdep::localmoran(surf, lw, zero.policy = TRUE)
-      lagv   <- spdep::lag.listw(lw, surf, zero.policy = TRUE)
-      pcol   <- if ("Pr(z != E(Ii))" %in% colnames(lm_res))
-        "Pr(z != E(Ii))" else 5L
-      loc_sig <- !is.na(lm_res[, pcol]) & lm_res[, pcol] <= 0.05
-      mu_s <- mean(surf)
-      mu_l <- mean(lagv)
-
-      hh_sub <- (surf > mu_s) & (lagv > mu_l) & loc_sig
-      ll_sub <- (surf < mu_s) & (lagv < mu_l) & loc_sig
-
-      hh <- rep(FALSE, n_units); hh[which(keep)[hh_sub]] <- TRUE
-      ll <- rep(FALSE, n_units); ll[which(keep)[ll_sub]] <- TRUE
-
-      cl <- rep(NA_character_, n_units)
-      cl[hh] <- "test > base"
-      cl[ll] <- "base > test"
-
-      list(moran_I   = as.numeric(gm$statistic),
-           moran_p   = gm$p.value,
-           nsim      = nsim_moran,
-           n_hh      = sum(hh),
-           n_ll      = sum(ll),
-           hh        = hh,
-           ll        = ll,
-           cluster   = cl,
-           clustered = gm$p.value <= 0.05)
-    }, error = function(e) {
-      message("Arrangement test failed: ", conditionMessage(e))
-      NULL
-    })
+  # Widespread shift: one direction holds at least 80% of flagged units and
+  # at least half of those lie outside any cluster. Clusters can then sit on
+  # top of a citywide difference, and edge units carry less information.
+  wide_shift <- FALSE
+  if (!is.null(arrange_res)) {
+    n_up <- sum(sig_pv_dir ==  1L, na.rm = TRUE)
+    n_dn <- sum(sig_pv_dir == -1L, na.rm = TRUE)
+    n_flag_tot <- n_up + n_dn
+    if (n_flag_tot > 0L) {
+      dom   <- if (n_up >= n_dn) 1L else -1L
+      n_dom <- max(n_up, n_dn)
+      n_dom_out <- sum(sig_pv_dir == dom & !is.na(arrange_res$tier) &
+                         arrange_res$tier == "outside", na.rm = TRUE)
+      wide_shift <- n_dom / n_flag_tot >= 0.8 && n_dom_out / n_dom >= 0.5
+      arrange_res$dominant_share <- n_dom / n_flag_tot
+    }
   }
 
   # -- 11. Append result columns ----------------------------------------------
@@ -478,15 +550,17 @@ sppt <- function(data,
 
   if (calculate_pvalues) {
     result$pvalue          <- round(pvalue, 6)
+    if (correction != "none") result$pvalue_adj <- round(pvalue_adj, 6)
     result$sig_pvalue      <- sig_pvalue
     result$sig_pvalue_dir  <- sig_pv_dir
     result$signed_evidence <- round(
       sign(obs_diff) * -log10(pmax(pvalue, .Machine$double.eps)), 6)
   }
   if (!is.null(arrange_res)) {
-    result$moran_hh      <- arrange_res$hh
-    result$moran_ll      <- arrange_res$ll
-    result$moran_cluster <- arrange_res$cluster
+    result$moran_hh        <- arrange_res$hh
+    result$moran_ll        <- arrange_res$ll
+    result$moran_cluster   <- arrange_res$cluster
+    result$confidence_tier <- arrange_res$tier
   }
   if (calculate_ci) {
     result$ci_lower          <- round(ci_lower, 6)
@@ -498,8 +572,6 @@ sppt <- function(data,
   }
 
   # -- 12. Console results ----------------------------------------------------
-  fmt_p <- function(p) if (p < 0.0001) "< 0.0001" else sprintf("= %.4f", p)
-
   if (calculate_pvalues && !is.na(s_index_pv)) {
     say(sprintf("  Robust S-index  : %.4f  (%d of %d units dissimilar at alpha = %.3f)\n",
                 s_index_pv, n_sig_pv, n_eligible, alpha))
@@ -523,8 +595,13 @@ sppt <- function(data,
     if (n_eligible < n_units * 0.75)
       say("    Note          : many units empty in both patterns; the sameness\n",
           "                    test is conservative here.\n", sep = "")
-  } else if (calculate_pvalues && !is.na(s_index_pv) && fix_base) {
-    say("  Sameness test   : not reported (not calibrated for fix_base = TRUE).\n")
+  } else if (calculate_pvalues && !is.na(s_index_pv)) {
+    if (correction != "none")
+      say("  Sameness test   : not reported (the null flagging rate is not\n",
+          "                    alpha under a multiple testing correction).\n",
+          sep = "")
+    else if (fix_base)
+      say("  Sameness test   : not reported (not calibrated for fix_base = TRUE).\n")
   }
 
   if (calculate_ci && !is.na(s_index_ci)) {
@@ -543,6 +620,18 @@ sppt <- function(data,
     say(sprintf("    Local clusters: %d units where %s > %s, %d units where %s > %s\n",
                 arrange_res$n_hh, test_name, base_name,
                 arrange_res$n_ll, base_name, test_name))
+    say(sprintf("  Flagged units   : %d core, %d edge, %d outside\n",
+                arrange_res$n_core, arrange_res$n_edge,
+                arrange_res$n_outside))
+    say("    core = inside a cluster; edge = borders a core unit with the same\n",
+        "    sign; outside = all other flagged units (least reliable)\n",
+        sep = "")
+    if (wide_shift && arrange_res$n_edge > 0L)
+      say(sprintf(paste0(
+        "    Note: %.0f%% of flagged units share one direction. Edge units\n",
+        "    are still significant, but a widespread shift places flagged\n",
+        "    units beside clusters by chance; weigh core units more heavily.\n"),
+        100 * arrange_res$dominant_share))
   }
 
   # Two-way verdict: the count question and the arrangement question are
@@ -558,9 +647,13 @@ sppt <- function(data,
                 mark(FALSE, FALSE), mark(FALSE, TRUE)))
     say(sprintf("    count above chance | many, diffuse%-10s| differences real and localised%s\n",
                 mark(TRUE, FALSE), mark(TRUE, TRUE)))
-    say(sprintf("    This result        : %s, %s\n",
+    say(sprintf("    This result        : %s, %s%s\n",
                 if (count_hi) "count above chance" else "count at chance",
-                if (arr_hi) "arrangement clustered" else "arrangement random"))
+                if (arr_hi) "arrangement clustered" else "arrangement random",
+                # Clusters can sit on top of a citywide shift in one
+                # direction; "localised" alone would undersell the shift.
+                if (count_hi && arr_hi && wide_shift)
+                  ",\n                         plus a widespread shift" else ""))
   }
 
   if (n_zero > 0L)
@@ -570,26 +663,28 @@ sppt <- function(data,
 
   # -- 13. Summary attribute and class ----------------------------------------
   attr(result, "sppt_summary") <- list(
-    base_name       = base_name,
-    test_name       = test_name,
-    n_units         = n_units,
-    n_eligible      = n_eligible,
-    n_zero          = n_zero,
-    lambda_min      = lambda_min,
-    B               = B,
-    alpha           = if (calculate_pvalues) alpha else NULL,
-    s_index_pv      = s_index_pv,
-    n_sig_pv        = n_sig_pv,
-    sameness        = sameness,
-    arrangement     = if (is.null(arrange_res)) NULL else
+    base_name        = base_name,
+    test_name        = test_name,
+    n_units          = n_units,
+    n_eligible       = n_eligible,
+    n_zero           = n_zero,
+    lambda_min       = lambda_min,
+    B                = B,
+    alpha            = if (calculate_pvalues) alpha else NULL,
+    correction       = correction,
+    s_index_pv       = s_index_pv,
+    n_sig_pv         = n_sig_pv,
+    sameness         = sameness,
+    arrangement      = if (is.null(arrange_res)) NULL else
       arrange_res[c("moran_I", "moran_p", "nsim", "n_hh", "n_ll",
-                    "clustered")],
-    conf_level      = if (calculate_ci) conf_level else NULL,
-    s_index_ci      = s_index_ci,
-    n_sig_ci        = n_sig_ci,
-    use_percentages = use_percentages,
-    fix_base        = fix_base,
-    decision_tier   = decision_tier
+                    "n_core", "n_edge", "n_outside", "clustered")],
+    widespread_shift = wide_shift,
+    conf_level       = if (calculate_ci) conf_level else NULL,
+    s_index_ci       = s_index_ci,
+    n_sig_ci         = n_sig_ci,
+    use_percentages  = use_percentages,
+    fix_base         = fix_base,
+    decision_tier    = decision_tier
   )
   class(result) <- c("sppt_result", class(result))
 
@@ -606,10 +701,12 @@ sppt <- function(data,
       if (export_maps) {
         files <- c(difference = "map1_difference.png",
                    pvalue     = "map2_pvalue_significance.png",
+                   tiers      = "map2b_confidence_tiers.png",
                    ci         = "map3_ci_significance.png")
         for (nm in names(maps))
           ggplot2::ggsave(file.path(export_dir, files[[nm]]), maps[[nm]],
-                          width = 8, height = 6, dpi = map_dpi)
+                          width = 8, height = if (nm == "tiers") 7 else 6,
+                          dpi = map_dpi)
         say("Maps exported to:", export_dir, "\n")
       }
       attr(result, "sppt_maps") <- maps
@@ -632,10 +729,84 @@ sppt <- function(data,
   result
 }
 
+# -- Internal helpers ---------------------------------------------------------
+
+fmt_p <- function(p) if (p < 0.0001) "< 0.0001" else sprintf("= %.4f", p)
+
+# Global and local Moran's I on the signed evidence surface, and the
+# confidence tier of every flagged unit.
+arrangement_test <- function(data, obs_diff, pvalue, zero_mask, sig_pv_dir,
+                             nsim_moran) {
+  n_units <- length(obs_diff)
+  nb_all  <- spdep::poly2nb(data, queen = TRUE)
+  keep    <- !zero_mask
+  nb_sub  <- subset(nb_all, keep)
+  lw      <- spdep::nb2listw(nb_sub, style = "W", zero.policy = TRUE)
+  # The bounded p-value caps this at -log10(1/(B+1)); the pmax is a guard
+  # that should never bind.
+  surf <- sign(obs_diff[keep]) *
+    -log10(pmax(pvalue[keep], .Machine$double.eps))
+
+  gm <- spdep::moran.mc(surf, lw, nsim = nsim_moran,
+                        zero.policy = TRUE, alternative = "greater")
+
+  lm_res <- spdep::localmoran(surf, lw, zero.policy = TRUE)
+  lagv   <- spdep::lag.listw(lw, surf, zero.policy = TRUE)
+  pcol   <- if ("Pr(z != E(Ii))" %in% colnames(lm_res))
+    "Pr(z != E(Ii))" else 5L
+  loc_sig <- !is.na(lm_res[, pcol]) & lm_res[, pcol] <= 0.05
+  mu_s <- mean(surf)
+  mu_l <- mean(lagv)
+
+  # Local Moran sorts units around the MEAN of the surface. When most units
+  # lean one way the mean is far from zero, and "below the mean" can include
+  # units where the test variable is still higher. Each outlined unit must
+  # therefore also have the sign its label states.
+  hh_sub <- (surf > mu_s) & (lagv > mu_l) & loc_sig & (surf > 0)
+  ll_sub <- (surf < mu_s) & (lagv < mu_l) & loc_sig & (surf < 0)
+
+  hh <- rep(FALSE, n_units); hh[which(keep)[hh_sub]] <- TRUE
+  ll <- rep(FALSE, n_units); ll[which(keep)[ll_sub]] <- TRUE
+
+  cl <- rep(NA_character_, n_units)
+  cl[hh] <- "test > base"
+  cl[ll] <- "base > test"
+
+  # Confidence tiers. Core = flagged and outlined. Edge = flagged, not core,
+  # and a queen neighbour of a core unit whose difference has the same sign.
+  # Outside = any other flagged unit.
+  flag <- !is.na(sig_pv_dir) & sig_pv_dir != 0L
+  core <- flag & (hh | ll)
+  edge <- vapply(seq_len(n_units), function(i) {
+    if (!flag[i] || core[i]) return(FALSE)
+    nbv <- nb_all[[i]]
+    nbv <- nbv[nbv > 0L]
+    any(core[nbv] & sig_pv_dir[nbv] == sig_pv_dir[i])
+  }, logical(1))
+  tier <- rep(NA_character_, n_units)
+  tier[flag] <- "outside"
+  tier[edge] <- "edge"
+  tier[core] <- "core"
+
+  list(moran_I   = as.numeric(gm$statistic),
+       moran_p   = gm$p.value,
+       nsim      = nsim_moran,
+       n_hh      = sum(hh),
+       n_ll      = sum(ll),
+       hh        = hh,
+       ll        = ll,
+       cluster   = cl,
+       tier      = tier,
+       n_core    = sum(core),
+       n_edge    = sum(edge),
+       n_outside = sum(flag) - sum(core) - sum(edge),
+       clustered = gm$p.value <= 0.05)
+}
+
 #' Summarise an SPPT result
 #'
-#' Prints the robust S index, the sameness and arrangement tests and the
-#' settings of a [sppt()] result.
+#' Prints the robust S index, the sameness and arrangement tests, the
+#' confidence tier counts and the settings of a [sppt()] result.
 #'
 #' @param object,x An object of class `sppt_result`, as returned by [sppt()].
 #' @param ... Further arguments passed to the `sf` method.
@@ -651,8 +822,6 @@ summary.sppt_result <- function(object, ...) {
   s <- attr(object, "sppt_summary")
   if (is.null(s)) return(NextMethod())
 
-  fmt_p <- function(p) if (p < 0.0001) "< 0.0001" else sprintf("= %.4f", p)
-
   cat("\n")
   cat("==================================================================\n")
   cat("SPPT Summary\n")
@@ -663,6 +832,8 @@ summary.sppt_result <- function(object, ...) {
               s$n_units, s$n_eligible, s$n_zero))
   cat(sprintf("  lambda_min       : %.3f\n", s$lambda_min))
   cat(sprintf("  Bootstrap B      : %d\n", s$B))
+  if (!is.null(s$correction) && s$correction != "none")
+    cat(sprintf("  Correction       : %s\n", s$correction))
   if (!is.null(s$alpha) && !is.na(s$s_index_pv))
     cat(sprintf("  Robust S-index   : %.4f  (alpha = %.3f; %d dissimilar)\n",
                 s$s_index_pv, s$alpha, s$n_sig_pv))
@@ -683,6 +854,12 @@ summary.sppt_result <- function(object, ...) {
     cat(sprintf("  Local clusters   : %d (%s > %s), %d (%s > %s)\n",
                 s$arrangement$n_hh, s$test_name, s$base_name,
                 s$arrangement$n_ll, s$base_name, s$test_name))
+    if (!is.null(s$arrangement$n_core))
+      cat(sprintf("  Flagged by tier  : %d core, %d edge, %d outside%s\n",
+                  s$arrangement$n_core, s$arrangement$n_edge,
+                  s$arrangement$n_outside,
+                  if (isTRUE(s$widespread_shift)) " (widespread shift)"
+                  else ""))
   }
   cat(sprintf("  Decision tier    : %s\n", s$decision_tier))
   cat("==================================================================\n\n")

@@ -12,7 +12,7 @@ sppt_longitudinal(
   seed = NULL,
   alpha = 0.05,
   calculate_pvalues = TRUE,
-  conf_level = 0.683,
+  conf_level = 0.85,
   fix_base = FALSE,
   use_percentages = TRUE,
   prefix = NULL,
@@ -55,14 +55,18 @@ value avoids ties.}
 \item{seed}{Integer or \code{NULL}. Random seed for reproducibility.}
 
 \item{alpha}{Numeric in (0, 1). Significance level for flagging a unit.
-Default \code{0.05}.}
+Default \code{0.05}. Where control of false discoveries is the priority and
+the analysis is at census tracts or an equally coarse scale
+(\code{lambda_min} above roughly 10 to 15), use \code{0.01}.}
 
 \item{calculate_pvalues}{Logical. Compute bootstrap p-values. Default
 \code{TRUE}.}
 
 \item{conf_level}{Numeric in (0, 1). Confidence level of the bootstrap
-envelopes. Default \code{0.683} (about one standard deviation per tail), which
-matches \code{alpha = 0.05} p-value performance.}
+envelopes. Default \code{0.85}: two marginal 85\% intervals fail to overlap
+when the difference exceeds about 2.04 standard errors, which
+corresponds to a two-sample test at about \code{alpha = 0.05} (Andresen
+2026).}
 
 \item{fix_base}{Logical. If \code{TRUE}, the base period is not bootstrapped and
 its observed shares are treated as fixed (the approach of earlier
@@ -136,7 +140,8 @@ tables as a CSV in \code{export_dir}. Default \code{FALSE}.}
 summary and the maps.}
 }
 \value{
-An \code{sf} object containing the columns of \code{data} plus, for each
+An \code{sf} object of class \code{sppt_long_result} containing the
+columns of \code{data} plus, for each
 period, \verb{<count_col>_L} and \verb{<count_col>_U} (envelope bounds) and, with
 p-values, \verb{pvalue_<count_col>} (\code{NA} for the base period). Unit-level
 results are named with \code{prefix}:
@@ -169,8 +174,15 @@ The S indices, Jenks breaks, trend tables and p-value matrix are stored as
 attributes (for example \code{attr(x, "s_index_overlap")},
 \code{attr(x, "interval_table_linear")}, \code{attr(x, "pvalue_matrix")}). With
 \code{create_maps = TRUE} the maps are stored as a named list of \code{ggplot}
-objects in \code{attr(x, "sppt_maps")}; use \code{\link[=sppt_map]{sppt_map()}} to redraw them with a
-different layout.
+objects in \code{attr(x, "sppt_maps")}; use \code{\link[=sppt_map]{sppt_map()}} or \code{plot()} to redraw
+them with a different layout. \code{summary()} prints the S indices and trend
+counts.
+
+\strong{Relation to the published description.} Andresen (2026) gives the
+p-value as \eqn{r/B}; this implementation uses the bounded form
+\eqn{(1 + r)/(B + 1)}, as in \code{\link[=sppt]{sppt()}}, so no p-value is exactly zero. The
+bundled \code{vancouver_da} data have 1,016 dissemination areas, so results
+differ slightly from the 1,019 units analysed there.
 }
 \description{
 Extends the spatial point pattern test to a time series of three or more
@@ -213,6 +225,7 @@ attr(res, "si_overlap_p")
 Andresen, M.A. (2026). Testing longitudinal change in spatial
 distributions and patterns: An extension of the spatial point pattern
 test. \emph{Annals of the American Association of Geographers}, in press.
+\doi{10.1080/24694452.2026.2733304}
 }
 \seealso{
 \code{\link[=sppt]{sppt()}}, \code{\link[=sppt_map]{sppt_map()}}, \link{vancouver_ct}

@@ -51,3 +51,60 @@ test_that("sppt_map redraws maps with a new layout", {
   expect_error(sppt_map(res, "ci"), "not available")
   expect_error(sppt_map(res, north_arrow = "middle"), "north_arrow")
 })
+
+test_that("confidence tiers cover exactly the flagged units", {
+  res <- run_sppt()
+  flagged <- !is.na(res$sig_pvalue_dir) & res$sig_pvalue_dir != 0L
+  expect_identical(!is.na(res$confidence_tier), flagged)
+  expect_true(all(res$confidence_tier[flagged] %in%
+                    c("core", "edge", "outside")))
+  s <- attr(res, "sppt_summary")$arrangement
+  expect_equal(s$n_core + s$n_edge + s$n_outside, sum(flagged))
+})
+
+test_that("cluster outlines carry the sign of their label", {
+  res <- run_sppt()
+  expect_true(all(res$difference[res$moran_hh] > 0))
+  expect_true(all(res$difference[res$moran_ll] < 0))
+})
+
+test_that("a correction keeps raw p-values and drops the sameness test", {
+  res <- suppressWarnings(run_sppt(arrangement = FALSE, correction = "BH"))
+  expect_true(all(res$pvalue_adj >= res$pvalue, na.rm = TRUE))
+  expect_null(attr(res, "sppt_summary")$sameness)
+  expect_warning(run_sppt(arrangement = FALSE, correction = "BH"),
+                 "not recommended")
+  expect_error(run_sppt(correction = "fdr"), "correction")
+})
+
+test_that("conf_level defaults to 0.85", {
+  expect_identical(formals(sppt)$conf_level, 0.85)
+  res <- run_sppt(arrangement = FALSE, calculate_ci = TRUE)
+  expect_equal(attr(res, "sppt_summary")$conf_level, 0.85)
+})
+
+test_that("plot draws the tier map", {
+  res <- run_sppt()
+  p <- NULL
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
+  p <- plot(res, "tiers")
+  expect_s3_class(p, "ggplot")
+  expect_named(sppt_map(res), c("difference", "pvalue", "tiers"))
+})
+
+test_that("sppt_clusters labels clusters consistently", {
+  res <- run_sppt()
+  cl <- sppt_clusters(res, nsim = 99, seed = 1)
+  expect_s3_class(cl, "sppt_clusters")
+  flagged <- !is.na(res$sig_pvalue_dir) & res$sig_pvalue_dir != 0L
+  expect_identical(!is.na(cl$membership), flagged)
+  expect_equal(as.integer(table(cl$membership)), cl$clusters$size)
+  expect_false(is.unsorted(rev(cl$clusters$size)))
+  expect_false(is.unsorted(rev(cl$ceiling$min_size)))
+  expect_output(print(cl), "Ceiling")
+  # Clusters within direction are never larger than undirected ones
+  cd <- sppt_clusters(res, direction = TRUE, nsim = 99, seed = 1)
+  expect_true(all(cd$clusters$direction != "mixed"))
+  expect_lte(max(cd$clusters$size), max(cl$clusters$size))
+})

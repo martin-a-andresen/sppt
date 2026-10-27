@@ -19,8 +19,8 @@
 \code{"sppt_summary"} attribute. \code{print()} invisibly returns \code{x}.
 }
 \description{
-Prints the robust S index, the sameness and arrangement tests and the
-settings of a \code{\link[=sppt]{sppt()}} result.
+Prints the robust S index, the sameness and arrangement tests, the
+confidence tier counts and the settings of a \code{\link[=sppt]{sppt()}} result.
 }
 \examples{
 res <- sppt(vancouver_ct, group_col = "id",

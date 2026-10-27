@@ -1,7 +1,7 @@
 Package: sppt
 Type: Package
 Title: Spatial Point Pattern Test for Areal Data
-Version: 1.0.0
+Version: 1.1.0
 Authors@R:
     person("Martin A.", "Andresen", email = "andresen@sfu.ca",
            role = c("aut", "cre", "cph"),
@@ -15,7 +15,10 @@ Description: Implements the area-based nonparametric spatial point pattern
     retained as an option. Global similarity is summarised by the robust S
     index, accompanied by a test of whether two patterns are more different
     than two realisations of a single process, and a test of the spatial
-    arrangement of the differences. A longitudinal extension compares each
+    arrangement of the differences. Flagged units are ranked by confidence
+    tier from their position relative to local clusters, and clusters of
+    flagged units are tested against the clusters that false positives
+    alone produce on the same map. A longitudinal extension compares each
     period of a time series against a base period and classifies unit-level
     trajectories. Publication-ready maps can be redrawn with user-chosen
     layouts.
@@ -32,6 +35,7 @@ Imports:
     graphics,
     grDevices,
     Matrix,
+    methods,
     rlang,
     scales,
     sf,

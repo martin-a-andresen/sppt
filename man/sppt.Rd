@@ -15,8 +15,9 @@ sppt(
   sameness_tau = 0.05,
   arrangement = TRUE,
   nsim_moran = 999L,
+  correction = "none",
   calculate_ci = FALSE,
-  conf_level = 0.683,
+  conf_level = 0.85,
   fix_base = FALSE,
   use_percentages = TRUE,
   verbose = TRUE,
@@ -45,7 +46,9 @@ value avoids ties.}
 \item{seed}{Integer or \code{NULL}. Random seed for reproducibility.}
 
 \item{alpha}{Numeric in (0, 1). Significance level for flagging a unit.
-Default \code{0.05}.}
+Default \code{0.05}. Where control of false discoveries is the priority and
+the analysis is at census tracts or an equally coarse scale
+(\code{lambda_min} above roughly 10 to 15), use \code{0.01}.}
 
 \item{calculate_pvalues}{Logical. Compute bootstrap p-values. Default
 \code{TRUE}.}
@@ -55,19 +58,27 @@ test on the robust S index. Separate from \code{alpha}, which governs the
 flagging of individual units. Default \code{0.05}.}
 
 \item{arrangement}{Logical. Run the arrangement test (global and local
-Moran's I on the signed evidence surface). Requires polygon geometry.
-Default \code{TRUE}.}
+Moran's I on the signed evidence surface) and assign confidence tiers.
+Requires polygon geometry. Default \code{TRUE}.}
 
 \item{nsim_moran}{Integer. Permutations for the global Moran's I test.
 Default \code{999}.}
+
+\item{correction}{Character. Multiple testing correction, passed to
+\code{\link[stats:p.adjust]{stats::p.adjust()}}: \code{"none"} (default, recommended), \code{"BH"}, \code{"BY"},
+\code{"bonferroni"}, \code{"holm"}, \code{"hochberg"} or \code{"hommel"}. Any other choice
+issues a warning and suppresses the sameness test, whose null flagging
+rate is \code{alpha} only without a correction.}
 
 \item{calculate_ci}{Logical. Also compute marginal bootstrap confidence
 intervals and the CI-based S index (Andresen 2009). Default \code{FALSE}.}
 
 \item{conf_level}{Numeric in (0, 1). Confidence level for the interval
-overlap criterion. Default \code{0.683} (about one standard deviation per
-tail), which matches \code{alpha = 0.05} p-value performance. Only used when
-\code{calculate_ci = TRUE}.}
+overlap criterion. Default \code{0.85}: two marginal 85\% intervals fail to
+overlap when the difference exceeds about 2.04 standard errors, which
+corresponds to a two-sample test at about \code{alpha = 0.05} (Andresen
+2026). \code{0.95} reproduces the original, more conservative analysis. Only
+used when \code{calculate_ci = TRUE}.}
 
 \item{fix_base}{Logical. If \code{TRUE}, the base pattern is not bootstrapped
 and its observed proportions are treated as fixed. This gives an
@@ -118,12 +129,16 @@ for every row).}
 \item{\code{low_power_warning}}{\code{TRUE} when \code{lambda_min < 1.5}.}
 \item{\code{pvalue}}{Bootstrap p-value; \code{NA} for units empty in both
 patterns.}
-\item{\code{sig_pvalue}}{1 if \code{pvalue <= alpha}, otherwise 0.}
+\item{\code{pvalue_adj}}{Adjusted p-value (only with a \code{correction}).}
+\item{\code{sig_pvalue}}{1 if the unit is flagged at \code{alpha}, otherwise 0.}
 \item{\code{sig_pvalue_dir}}{1 = test > base, -1 = base > test, 0 = not
 significant.}
-\item{\code{signed_evidence}}{\eqn{\mathrm{sign}(d) \times -\log_{10}(p)}.}
+\item{\code{signed_evidence}}{\eqn{\mathrm{sign}(d) \times -\log_{10}(p)},
+from the raw p-value.}
 \item{\code{moran_hh}, \code{moran_ll}, \code{moran_cluster}}{Local Moran clusters of
 the signed evidence surface (arrangement test only).}
+\item{\code{confidence_tier}}{\code{"core"}, \code{"edge"} or \code{"outside"} for flagged
+units, \code{NA} otherwise (arrangement test only).}
 \item{\code{ci_lower}, \code{ci_upper}, \code{ci_lower_test}, \code{ci_upper_test}}{Marginal
 confidence bounds for base and test (CI only).}
 \item{\code{intervals_overlap}}{1 = intervals overlap (similar), 0 = they do
@@ -131,10 +146,11 @@ not (CI only).}
 \item{\code{sig_ci_dir}}{Direction of CI-based differences (CI only).}
 }
 The attribute \code{"sppt_summary"} holds the robust S index, the sameness and
-arrangement tests and the settings; \code{summary()} prints it. The attribute
-\code{"sppt_maps"} holds the maps as a named list of \code{ggplot} objects
-(\code{difference}, \code{pvalue} and, with CI, \code{ci}); use \code{\link[=sppt_map]{sppt_map()}} to redraw
-them with a different layout.
+arrangement tests, the tier counts and the settings; \code{summary()} prints
+it. The attribute \code{"sppt_maps"} holds the maps as a named list of
+\code{ggplot} objects (\code{difference}, \code{pvalue}, \code{tiers} with the arrangement
+test, and \code{ci} with CI); use \code{\link[=sppt_map]{sppt_map()}} or \code{plot()} to redraw them with
+a different layout.
 }
 \description{
 Compares two spatial point patterns, a base and a test, across a set of
@@ -152,7 +168,8 @@ patterns are more different than two realisations of a single process;
 \item an \strong{arrangement test}, global Moran's I on the signed evidence surface
 \eqn{\mathrm{sign}(d) \times -\log_{10}(p)}, which asks whether the
 differences, however many there are, are spatially organised. Local
-Moran clusters are outlined on the p-value map.
+Moran clusters are outlined on the p-value map, and each flagged unit is
+given a confidence tier from its position relative to those clusters.
 }
 }
 \details{
@@ -165,15 +182,57 @@ absolute value as the observed difference. The smallest attainable
 p-value is therefore \eqn{1/(B + 1)}. Units with no events in either
 pattern are excluded from inference and receive \code{NA}.
 
-No multiple testing correction is applied. Simulation evidence shows that
-corrections remove power at fine spatial scales without a meaningful
-benefit in false discovery rate; the sameness and arrangement tests
-address the global question instead.
+The bootstrap resamples events at their observed locations and
+re-aggregates them to the areal units; drawing counts from the
+multinomial distribution of observed shares is the closed-form equivalent.
+Locations are never permuted, so the null is sampling variability around
+the observed intensity surface, not spatial randomness.
+
+\strong{Multiple testing.} No correction is applied by default. Simulation
+evidence shows that corrections remove power at fine spatial scales
+without a meaningful benefit in false discovery rate, and that at coarse
+scales a stricter \code{alpha} achieves the same as a correction. The sameness
+and arrangement tests address the global question instead. Corrections
+remain available through \code{correction} so that earlier analyses can be
+reproduced; with a correction, \code{pvalue} holds the raw p-values,
+\code{pvalue_adj} the adjusted ones, and units are flagged on the adjusted
+values. Note that family-wise corrections can be inoperative rather than
+merely conservative: Bonferroni rejects nothing whenever the number of
+units exceeds \eqn{\alpha(B + 1)}, however strong the evidence.
 
 \strong{Power.} \code{lambda_min}, the mean number of events per unit in the rarer
 pattern, governs power. Below 1.5 a low-power warning is issued and below
-0.5 a critical warning; at those resolutions, interpret groups of adjacent
-flagged units rather than isolated ones, or aggregate to coarser units.
+0.5 a critical warning; at those resolutions, read core and edge units
+rather than isolated flags, test the clusters with \code{\link[=sppt_clusters]{sppt_clusters()}}, or
+aggregate to coarser units.
+
+\strong{Confidence tiers.} With \code{arrangement = TRUE}, each flagged unit is
+placed in one tier:
+\itemize{
+\item \code{"core"}: inside a local Moran outline of the same direction;
+\item \code{"edge"}: not core, but sharing a border (queen contiguity) with a core
+unit whose difference has the same sign;
+\item \code{"outside"}: any other flagged unit.
+}
+
+Every tier is significant at \code{alpha}; the tiers add spatial context and
+rank confidence, they do not certify a difference as real. In simulation
+(21 crime type pairs, 7 spatial scales, 200 iterations, \code{alpha = 0.05},
+medians across pairs) the share of flagged units that were true
+differences was 0.34 to 0.88 among all flagged units, 0.85 to 0.98 among
+core units and 0.81 to 0.97 among core plus edge units. Edge units are
+least informative when one direction dominates, because a widespread
+shift places flagged units next to clusters by chance; the console notes
+this case.
+
+Local Moran classifies units around the mean of the signed surface, so a
+unit is outlined as "test > base" only if its own difference is positive,
+and as "base > test" only if it is negative.
+
+\strong{Relation to published descriptions.} The original test (Andresen 2009)
+compared confidence intervals only; p-values, the sameness and
+arrangement tests and the tiers are later additions. The p-value here is
+the bounded form \eqn{(1 + r)/(B + 1)} rather than \eqn{r/B}.
 }
 \examples{
 res <- sppt(vancouver_ct, group_col = "id",
@@ -181,6 +240,7 @@ res <- sppt(vancouver_ct, group_col = "id",
             B = 199, seed = 42, create_maps = FALSE)
 summary(res)
 table(res$sig_pvalue_dir)
+table(res$confidence_tier, useNA = "ifany")
 
 }
 \references{
@@ -191,8 +251,13 @@ patterns: A nonparametric Monte Carlo approach. \emph{Applied Geography},
 Andresen, M.A. (2016). An area-based nonparametric spatial point pattern
 test: The test, its applications, and the future. \emph{Methodological
 Innovations}, 9, Article 12. \doi{10.1177/2059799116630659}
+
+Andresen, M.A. (2026). Testing longitudinal change in spatial
+distributions and patterns: An extension of the spatial point pattern
+test. \emph{Annals of the American Association of Geographers}, in press.
+\doi{10.1080/24694452.2026.2733304}
 }
 \seealso{
-\code{\link[=sppt_longitudinal]{sppt_longitudinal()}}, \code{\link[=sppt_sameness]{sppt_sameness()}}, \code{\link[=sppt_map]{sppt_map()}},
-\link{vancouver_ct}
+\code{\link[=sppt_longitudinal]{sppt_longitudinal()}}, \code{\link[=sppt_sameness]{sppt_sameness()}}, \code{\link[=sppt_clusters]{sppt_clusters()}},
+\code{\link[=sppt_map]{sppt_map()}}, \link{vancouver_ct}
 }
