@@ -29,6 +29,14 @@
 
 ## Bug fixes
 
+* In `sppt_longitudinal()`, the p-value average index
+  (`max_overlap_proportion_p`, and the S-index average built on it) and
+  `prop_sig_p` are now shares of the T - 1 test periods. Version 1.0.0
+  divided by all T periods, counting the base period, which is never
+  compared with itself, as non-significant. The average index was therefore
+  slightly too high, by the share of test periods that differ divided by T:
+  with 23 periods, an average of 0.809 becomes about 0.800.
+
 * Local Moran outlines now require the matching sign: a unit is outlined
   as "test > base" only if its difference is positive, and as
   "base > test" only if it is negative. Local Moran classifies around the

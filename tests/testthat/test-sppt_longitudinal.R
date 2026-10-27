@@ -57,3 +57,15 @@ test_that("longitudinal results have a class with summary and plot", {
   on.exit(grDevices::dev.off())
   expect_s3_class(plot(res), "ggplot")
 })
+
+test_that("the p-value average index is a share of the T - 1 test periods", {
+  res <- sppt_longitudinal(vancouver_ct, group_col = "id",
+                           count_col = paste0("BNER", 2003:2008),
+                           B = 99, seed = 1, verbose = FALSE,
+                           create_maps = FALSE, create_time_plot = FALSE)
+  pm <- attr(res, "pvalue_matrix")[, -1]
+  share <- rowMeans(pm <= 0.05)
+  expect_equal(res$BNER_prop_sig_p, share)
+  expect_equal(res$BNER_max_overlap_proportion_p, 1 - share)
+  expect_equal(attr(res, "si_average_p"), mean(1 - share))
+})
