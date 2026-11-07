@@ -9,6 +9,12 @@
   with `calculate_ci = TRUE`, and all envelope results of
   `sppt_longitudinal()`, differ from version 1.0.0. P-value results are
   unchanged.
+* `B` now defaults to `"auto"` in `sppt()` and `sppt_longitudinal()`. The
+  number of replicates is the largest of a minimum of 4999, enough for a
+  Monte Carlo standard error at `alpha` of at most 10% of `alpha`, and,
+  under a correction, enough for the most significant unit to survive it.
+  At `alpha = 0.05` without a correction this is 4999, as before, so default
+  results are unchanged. An integer can still be given.
 
 ## New features
 
@@ -23,6 +29,14 @@
   one-gap or contiguous rule. Clusters are built within each direction of
   difference by default; `direction = FALSE` reproduces the published
   reference values.
+* `sppt()` gains `correction` for multiple testing corrections (methods of
+  `p.adjust()`; `"BY"` controls the false discovery rate under any
+  dependence). Raw p-values stay in `pvalue` and adjusted ones go in
+  `pvalue_adj`; units are flagged on the adjusted values and the sameness
+  test is not reported under a correction.
+* Large numbers of replicates are computed in blocks, so memory no longer
+  grows with `B` (without `calculate_ci`). Results are the same as the
+  single-matrix calculation.
 * `plot()` methods for `sppt()` and `sppt_longitudinal()` results.
 * `sppt_longitudinal()` results now have class `sppt_long_result`, with
   `summary()` and `print()` methods.

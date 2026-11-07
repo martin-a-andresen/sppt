@@ -8,7 +8,7 @@ sppt_longitudinal(
   data,
   group_col = "group",
   count_col,
-  B = 4999L,
+  B = "auto",
   seed = NULL,
   alpha = 0.05,
   calculate_pvalues = TRUE,
@@ -49,8 +49,10 @@ period, in time order (for example \code{paste0("BNER", 2003:2025)}). The
 first is the base period. Column names should end in the period number,
 which is used to label the time axis.}
 
-\item{B}{Integer. Number of bootstrap replicates. Default \code{4999}; an odd
-value avoids ties.}
+\item{B}{\code{"auto"} (default) or an integer of at least 99: the number of
+bootstrap replicates for each period. \code{"auto"} chooses it from \code{alpha}
+as in \code{\link[=sppt]{sppt()}}: 4999 at \code{alpha = 0.05}, 9999 at \code{alpha = 0.01}. Memory
+grows with the number of periods times units times \code{B}.}
 
 \item{seed}{Integer or \code{NULL}. Random seed for reproducibility.}
 

@@ -8,13 +8,14 @@ sppt(
   data,
   group_col = "group",
   count_col,
-  B = 4999L,
+  B = "auto",
   seed = NULL,
   alpha = 0.05,
   calculate_pvalues = TRUE,
   sameness_tau = 0.05,
   arrangement = TRUE,
   nsim_moran = 999L,
+  correction = "none",
   calculate_ci = FALSE,
   conf_level = 0.85,
   fix_base = FALSE,
@@ -39,8 +40,10 @@ each spatial unit (for example \code{"DAUID"} or \code{"CTUID"}).}
 \item{count_col}{Character vector of length 2 giving the base and test
 count columns, in that order (for example \code{c("BNER2003", "BNER2025")}).}
 
-\item{B}{Integer. Number of bootstrap replicates. Default \code{4999}; an odd
-value avoids ties.}
+\item{B}{\code{"auto"} (default) or an integer of at least 99: the number of
+bootstrap replicates. \code{"auto"} chooses it from \code{alpha}, the number of
+eligible units and \code{correction} (see Details). An integer is used as
+given; an odd value avoids ties.}
 
 \item{seed}{Integer or \code{NULL}. Random seed for reproducibility.}
 
@@ -62,6 +65,10 @@ Requires polygon geometry. Default \code{TRUE}.}
 
 \item{nsim_moran}{Integer. Permutations for the global Moran's I test.
 Default \code{999}.}
+
+\item{correction}{Character. Multiple testing correction, a method of
+\code{\link[stats:p.adjust]{stats::p.adjust()}}: \code{"none"} (default), \code{"BY"}, \code{"BH"}, \code{"bonferroni"},
+\code{"holm"}, \code{"hochberg"} or \code{"hommel"}. See Details.}
 
 \item{calculate_ci}{Logical. Also compute marginal bootstrap confidence
 intervals and the CI-based S index (Andresen 2009). Default \code{FALSE}.}
@@ -122,7 +129,9 @@ for every row).}
 \item{\code{low_power_warning}}{\code{TRUE} when \code{lambda_min < 1.5}.}
 \item{\code{pvalue}}{Bootstrap p-value; \code{NA} for units empty in both
 patterns.}
-\item{\code{sig_pvalue}}{1 if \code{pvalue <= alpha}, otherwise 0.}
+\item{\code{pvalue_adj}}{Adjusted p-value (only with a \code{correction}).}
+\item{\code{sig_pvalue}}{1 if the unit is flagged at \code{alpha} (on the adjusted
+p-value under a correction), otherwise 0.}
 \item{\code{sig_pvalue_dir}}{1 = test > base, -1 = base > test, 0 = not
 significant.}
 \item{\code{signed_evidence}}{\eqn{\mathrm{sign}(d) \times -\log_{10}(p)}.}
@@ -179,13 +188,38 @@ multinomial distribution of observed shares is the closed-form equivalent.
 Locations are never permuted, so the null is sampling variability around
 the observed intensity surface, not spatial randomness.
 
-\strong{Multiple testing.} No correction is applied. Simulation evidence
-shows that corrections remove power at fine spatial scales without a
-meaningful benefit in false discovery rate, and that at coarse scales a
-stricter \code{alpha} achieves the same as a correction. The sameness and
-arrangement tests and \code{\link[=sppt_clusters]{sppt_clusters()}} address the global question
-instead. The raw p-values are returned, so a correction can still be
-applied with \code{\link[stats:p.adjust]{stats::p.adjust()}} if required.
+\strong{Multiple testing.} No correction is applied by default. Simulation
+evidence shows that corrections remove much of the power at fine spatial
+scales, and that at coarse scales a stricter \code{alpha} achieves much the same
+as a correction; the sameness and arrangement tests and \code{\link[=sppt_clusters]{sppt_clusters()}}
+address the global question instead. Where a list of units with
+controlled error is wanted, \code{correction} applies a method of
+\code{\link[stats:p.adjust]{stats::p.adjust()}}. \code{"BY"} (Benjamini and Yekutieli) controls the false
+discovery rate under any dependence between units, which the fixed totals
+of the two patterns create, so it is the safe choice; \code{"BH"} assumes
+independent or positively dependent tests. With a correction, \code{pvalue}
+holds the raw p-values, \code{pvalue_adj} the adjusted ones, units are flagged
+on the adjusted values, the S index counts those flags, and the sameness
+test is not reported, because the number of units flagged by chance is no
+longer binomial with rate \code{alpha}. The arrangement test and the tiers use
+the raw p-values for the evidence surface and the corrected flags for the
+tiers.
+
+\strong{Number of replicates.} With \code{B = "auto"} (default) the number of
+replicates is the largest of three requirements, rounded up to a number
+ending in 999: a minimum of 4999; a Monte Carlo standard error of a
+p-value at \code{alpha} no more than 10\% of \code{alpha}, which needs
+\eqn{B \ge 100(1 - \alpha)/\alpha}; and, under a correction, a smallest
+attainable p-value, \eqn{1/(B + 1)}, small enough for the most significant
+unit to survive it, \eqn{B + 1 \ge n/\alpha} for most methods and
+\eqn{B + 1 \ge n H_n/\alpha} for BY, where \eqn{n} is the number of
+eligible units and \eqn{H_n = 1 + 1/2 + \cdots + 1/n}. So \code{B = "auto"}
+gives 4999 at \code{alpha = 0.05} without a correction, 9999 at \code{alpha = 0.01},
+and 129,999 for BY at \code{alpha = 0.05} across 824 units. Large numbers of
+replicates are computed in blocks, so memory does not grow with \code{B}; the
+result is the same as the single-matrix calculation. The confidence
+interval option needs the full matrices, so with \code{calculate_ci = TRUE}
+memory grows with \eqn{n \times B}.
 
 \strong{Power.} \code{lambda_min}, the mean number of events per unit in the rarer
 pattern, governs power. Below 1.5 a low-power warning is issued and below

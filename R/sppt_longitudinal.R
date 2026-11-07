@@ -26,6 +26,10 @@
 #' as sustained zeros.
 #'
 #' @inheritParams sppt
+#' @param B `"auto"` (default) or an integer of at least 99: the number of
+#'   bootstrap replicates for each period. `"auto"` chooses it from `alpha`
+#'   as in [sppt()]: 4999 at `alpha = 0.05`, 9999 at `alpha = 0.01`. Memory
+#'   grows with the number of periods times units times `B`.
 #' @param count_col Character vector of three or more count columns, one per
 #'   period, in time order (for example `paste0("BNER", 2003:2025)`). The
 #'   first is the base period. Column names should end in the period number,
@@ -144,7 +148,7 @@
 sppt_longitudinal <- function(data,
                               group_col           = "group",
                               count_col,
-                              B                   = 4999L,
+                              B                   = "auto",
                               seed                = NULL,
                               alpha               = 0.05,
                               calculate_pvalues   = TRUE,
@@ -197,9 +201,21 @@ sppt_longitudinal <- function(data,
       stop("`count_col` column '", cc, "' contains negative values.",
            call. = FALSE)
   }
-  if (!is.numeric(B) || length(B) != 1L || B < 99)
-    stop("`B` must be a single integer >= 99.", call. = FALSE)
+  if (is.character(B) && length(B) == 1L && identical(tolower(B), "auto")) {
+    if (!is.numeric(alpha) || length(alpha) != 1L || alpha <= 0 || alpha >= 1)
+      stop("`alpha` must be a single numeric value in (0, 1).", call. = FALSE)
+    B <- choose_B(alpha, nrow(data))$B
+  } else if (!is.numeric(B) || length(B) != 1L || is.na(B) || B < 99) {
+    stop("`B` must be \"auto\" or a single integer >= 99.", call. = FALSE)
+  }
   B <- as.integer(B)
+  # One n x B matrix is kept per period for the p-values
+  if (as.numeric(nrow(data)) * B * length(count_col) > 2.5e8)
+    warning(sprintf(paste0(
+      "%d periods x %d units x %d replicates need about %.1f GB of memory. ",
+      "Consider fewer periods, coarser units or a smaller B."),
+      length(count_col), nrow(data), B,
+      8 * length(count_col) * nrow(data) * B / 1e9), call. = FALSE)
   if (!is.numeric(alpha) || length(alpha) != 1L || alpha <= 0 || alpha >= 1)
     stop("`alpha` must be a single numeric value in (0, 1).", call. = FALSE)
   if (!is.numeric(conf_level) || length(conf_level) != 1L ||

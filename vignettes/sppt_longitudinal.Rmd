@@ -119,7 +119,7 @@ res <- sppt_longitudinal(
   data                = vancouver_ct,
   group_col           = "id",
   count_col           = paste0("BNER", 2003:2025), # first = base period
-  B                   = 4999,       # bootstrap replicates; odd avoids ties
+  B                   = "auto",     # 4999 at alpha = 0.05
   seed                = NULL,       # set for reproducible results
   alpha               = 0.05,       # unit-level significance level
   calculate_pvalues   = TRUE,       # p-value results alongside envelopes

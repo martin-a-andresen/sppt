@@ -35,13 +35,38 @@
 #' Locations are never permuted, so the null is sampling variability around
 #' the observed intensity surface, not spatial randomness.
 #'
-#' **Multiple testing.** No correction is applied. Simulation evidence
-#' shows that corrections remove power at fine spatial scales without a
-#' meaningful benefit in false discovery rate, and that at coarse scales a
-#' stricter `alpha` achieves the same as a correction. The sameness and
-#' arrangement tests and [sppt_clusters()] address the global question
-#' instead. The raw p-values are returned, so a correction can still be
-#' applied with [stats::p.adjust()] if required.
+#' **Multiple testing.** No correction is applied by default. Simulation
+#' evidence shows that corrections remove much of the power at fine spatial
+#' scales, and that at coarse scales a stricter `alpha` achieves much the same
+#' as a correction; the sameness and arrangement tests and [sppt_clusters()]
+#' address the global question instead. Where a list of units with
+#' controlled error is wanted, `correction` applies a method of
+#' [stats::p.adjust()]. `"BY"` (Benjamini and Yekutieli) controls the false
+#' discovery rate under any dependence between units, which the fixed totals
+#' of the two patterns create, so it is the safe choice; `"BH"` assumes
+#' independent or positively dependent tests. With a correction, `pvalue`
+#' holds the raw p-values, `pvalue_adj` the adjusted ones, units are flagged
+#' on the adjusted values, the S index counts those flags, and the sameness
+#' test is not reported, because the number of units flagged by chance is no
+#' longer binomial with rate `alpha`. The arrangement test and the tiers use
+#' the raw p-values for the evidence surface and the corrected flags for the
+#' tiers.
+#'
+#' **Number of replicates.** With `B = "auto"` (default) the number of
+#' replicates is the largest of three requirements, rounded up to a number
+#' ending in 999: a minimum of 4999; a Monte Carlo standard error of a
+#' p-value at `alpha` no more than 10% of `alpha`, which needs
+#' \eqn{B \ge 100(1 - \alpha)/\alpha}; and, under a correction, a smallest
+#' attainable p-value, \eqn{1/(B + 1)}, small enough for the most significant
+#' unit to survive it, \eqn{B + 1 \ge n/\alpha} for most methods and
+#' \eqn{B + 1 \ge n H_n/\alpha} for BY, where \eqn{n} is the number of
+#' eligible units and \eqn{H_n = 1 + 1/2 + \cdots + 1/n}. So `B = "auto"`
+#' gives 4999 at `alpha = 0.05` without a correction, 9999 at `alpha = 0.01`,
+#' and 129,999 for BY at `alpha = 0.05` across 824 units. Large numbers of
+#' replicates are computed in blocks, so memory does not grow with `B`; the
+#' result is the same as the single-matrix calculation. The confidence
+#' interval option needs the full matrices, so with `calculate_ci = TRUE`
+#' memory grows with \eqn{n \times B}.
 #'
 #' **Power.** `lambda_min`, the mean number of events per unit in the rarer
 #' pattern, governs power. Below 1.5 a low-power warning is issued and below
@@ -80,8 +105,10 @@
 #'   each spatial unit (for example `"DAUID"` or `"CTUID"`).
 #' @param count_col Character vector of length 2 giving the base and test
 #'   count columns, in that order (for example `c("BNER2003", "BNER2025")`).
-#' @param B Integer. Number of bootstrap replicates. Default `4999`; an odd
-#'   value avoids ties.
+#' @param B `"auto"` (default) or an integer of at least 99: the number of
+#'   bootstrap replicates. `"auto"` chooses it from `alpha`, the number of
+#'   eligible units and `correction` (see Details). An integer is used as
+#'   given; an odd value avoids ties.
 #' @param seed Integer or `NULL`. Random seed for reproducibility.
 #' @param alpha Numeric in (0, 1). Significance level for flagging a unit.
 #'   Default `0.05`. Where control of false discoveries is the priority and
@@ -97,6 +124,9 @@
 #'   Requires polygon geometry. Default `TRUE`.
 #' @param nsim_moran Integer. Permutations for the global Moran's I test.
 #'   Default `999`.
+#' @param correction Character. Multiple testing correction, a method of
+#'   [stats::p.adjust()]: `"none"` (default), `"BY"`, `"BH"`, `"bonferroni"`,
+#'   `"holm"`, `"hochberg"` or `"hommel"`. See Details.
 #' @param calculate_ci Logical. Also compute marginal bootstrap confidence
 #'   intervals and the CI-based S index (Andresen 2009). Default `FALSE`.
 #' @param conf_level Numeric in (0, 1). Confidence level for the interval
@@ -143,7 +173,9 @@
 #'   \item{`low_power_warning`}{`TRUE` when `lambda_min < 1.5`.}
 #'   \item{`pvalue`}{Bootstrap p-value; `NA` for units empty in both
 #'     patterns.}
-#'   \item{`sig_pvalue`}{1 if `pvalue <= alpha`, otherwise 0.}
+#'   \item{`pvalue_adj`}{Adjusted p-value (only with a `correction`).}
+#'   \item{`sig_pvalue`}{1 if the unit is flagged at `alpha` (on the adjusted
+#'     p-value under a correction), otherwise 0.}
 #'   \item{`sig_pvalue_dir`}{1 = test > base, -1 = base > test, 0 = not
 #'     significant.}
 #'   \item{`signed_evidence`}{\eqn{\mathrm{sign}(d) \times -\log_{10}(p)}.}
@@ -192,13 +224,14 @@
 sppt <- function(data,
                  group_col          = "group",
                  count_col,
-                 B                  = 4999L,
+                 B                  = "auto",
                  seed               = NULL,
                  alpha              = 0.05,
                  calculate_pvalues  = TRUE,
                  sameness_tau       = 0.05,
                  arrangement        = TRUE,
                  nsim_moran         = 999L,
+                 correction         = "none",
                  calculate_ci       = FALSE,
                  conf_level         = 0.85,
                  fix_base           = FALSE,
@@ -241,9 +274,17 @@ sppt <- function(data,
            call. = FALSE)
   }
 
-  if (!is.numeric(B) || length(B) != 1L || B < 99)
-    stop("`B` must be a single integer >= 99.", call. = FALSE)
-  B <- as.integer(B)
+  B_auto <- is.character(B) && length(B) == 1L && identical(tolower(B), "auto")
+  if (!B_auto && (!is.numeric(B) || length(B) != 1L || is.na(B) || B < 99))
+    stop("`B` must be \"auto\" or a single integer >= 99.", call. = FALSE)
+  if (!B_auto) B <- as.integer(B)
+
+  valid_corrections <- c("none", "BY", "BH", "bonferroni", "holm",
+                         "hochberg", "hommel")
+  if (!is.character(correction) || length(correction) != 1L ||
+      !correction %in% valid_corrections)
+    stop("`correction` must be one of: ",
+         paste(valid_corrections, collapse = ", "), ".", call. = FALSE)
 
   if (!is.numeric(alpha) || length(alpha) != 1L || alpha <= 0 || alpha >= 1)
     stop("`alpha` must be a single numeric value in (0, 1).", call. = FALSE)
@@ -297,6 +338,28 @@ sppt <- function(data,
   N_a <- sum(counts_a)
   N_b <- sum(counts_b)
 
+  # Units empty in both patterns are excluded from inference, and from the
+  # number of tests that sets B under a correction.
+  zero_mask  <- counts_a == 0L & counts_b == 0L
+  n_zero     <- sum(zero_mask)
+  n_eligible <- n_units - n_zero
+
+  B_info <- choose_B(alpha, n_eligible, correction)
+  if (B_auto) {
+    B <- B_info$B
+  } else if (calculate_pvalues && correction != "none" && B < B_info$B_correction) {
+    warning(sprintf(paste0(
+      "With correction = \"%s\" and %d eligible units, no unit can be ",
+      "flagged unless B >= %d: the smallest attainable p-value, 1/(B + 1), ",
+      "is too large to survive the correction. Use B = \"auto\"."),
+      correction, n_eligible, B_info$B_correction), call. = FALSE)
+  }
+  B_note <- if (!B_auto) "set by user" else if (B_info$binding == "correction")
+    sprintf("auto: lets %s flag a unit among %d", correction, n_eligible)
+  else if (B_info$binding == "alpha")
+    sprintf("auto: Monte Carlo SE of p at alpha = %.2g", sqrt(alpha * (1 - alpha) / B))
+  else "auto: default minimum"
+
   # -- 3. lambda_min and decision tier ----------------------------------------
   lambda_min <- min(N_a, N_b) / n_units
 
@@ -341,9 +404,11 @@ sppt <- function(data,
   say(field_lines("Test", sprintf("%s (N = %d)", test_name, N_b)))
   say(field_lines("Units", n_units))
   say(field_lines("lambda_min", sprintf("%.3f", lambda_min)))
-  say(field_lines("Bootstrap B", B))
+  say(field_lines("Bootstrap B", sprintf("%d (%s)", B, B_note)))
   if (calculate_pvalues)
     say(field_lines("alpha", sprintf("%.3f", alpha)))
+  if (calculate_pvalues && correction != "none")
+    say(field_lines("Correction", correction))
   if (calculate_ci)
     say(field_lines("CI level", sprintf("%.1f%% (marginal overlap)",
                                         conf_level * 100)))
@@ -357,54 +422,77 @@ sppt <- function(data,
   prop_b <- if (N_b > 0) counts_b / N_b * scale_factor else rep(0, n_units)
   obs_diff <- prop_b - prop_a   # test minus base
 
-  # Units empty in both patterns are excluded from inference
-  zero_mask <- counts_a == 0L & counts_b == 0L
-  n_zero    <- sum(zero_mask)
-
   # -- 6. Shared bootstrap ----------------------------------------------------
   # One multinomial draw per variable, B replicates, shared by CI and PV.
   # Drawing counts from the multinomial of observed shares is the closed form
   # of resampling events at their observed locations and re-aggregating.
-  if (N_a == 0L || N_b == 0L) {
+  # When the n x B matrices would be large and no intervals are needed, the
+  # p-values are computed in blocks of replicates instead (blocked_counts()),
+  # which gives the same result without holding the matrices in memory.
+  valid_bootstrap <- N_a > 0L && N_b > 0L
+  if (!valid_bootstrap)
     warning("One or both count columns sum to zero. No inference possible.",
             call. = FALSE)
-    boot_a <- boot_b <- boot_diffs_c <- matrix(0, nrow = n_units, ncol = B)
-    valid_bootstrap <- FALSE
-  } else {
+  active   <- !zero_mask
+  max_cells <- getOption("sppt.max_cells", 2.5e7)
+  blocked  <- valid_bootstrap && !calculate_ci &&
+    as.numeric(n_units) * B > max_cells
+  r_count  <- NULL
+
+  if (valid_bootstrap) {
     p_a <- counts_a / N_a
     p_b <- counts_b / N_b
-
-    boot_a <- if (fix_base) {
-      matrix(rep(p_a * scale_factor, B), nrow = n_units, ncol = B)
+    if (blocked) {
+      if (calculate_pvalues) {
+        say(field_lines("Note", sprintf(
+          "computing p-values in blocks (%d units x %d replicates)",
+          n_units, B)))
+        r_count <- blocked_counts(N_a, N_b, p_a, p_b, B, fix_base,
+                                  scale_factor, obs_diff, active)
+      }
     } else {
-      matrix(stats::rmultinom(B, size = N_a, prob = p_a),
-             nrow = n_units) / N_a * scale_factor
-    }
-    boot_b <- matrix(stats::rmultinom(B, size = N_b, prob = p_b),
-                     nrow = n_units) / N_b * scale_factor
+      boot_a <- if (fix_base) {
+        matrix(rep(p_a * scale_factor, B), nrow = n_units, ncol = B)
+      } else {
+        matrix(stats::rmultinom(B, size = N_a, prob = p_a),
+               nrow = n_units) / N_a * scale_factor
+      }
+      boot_b <- matrix(stats::rmultinom(B, size = N_b, prob = p_b),
+                       nrow = n_units) / N_b * scale_factor
 
-    # Centred difference distribution for p-values
-    boot_diffs   <- boot_b - boot_a
-    boot_diffs_c <- boot_diffs - rowMeans(boot_diffs)
-    valid_bootstrap <- TRUE
+      # Centred difference distribution for p-values
+      boot_diffs_c <- boot_b - boot_a
+      boot_diffs_c <- boot_diffs_c - rowMeans(boot_diffs_c)
+      if (calculate_pvalues)
+        r_count <- rowSums(abs(boot_diffs_c[active, , drop = FALSE]) >=
+                             abs(obs_diff[active]))
+      rm(boot_diffs_c)
+      if (!calculate_ci) rm(boot_a, boot_b)
+    }
   }
 
   # -- 7. Bootstrap p-values --------------------------------------------------
   pvalue     <- rep(NA_real_, n_units)
+  pvalue_adj <- rep(NA_real_, n_units)
   sig_pvalue <- rep(NA_integer_, n_units)
   sig_pv_dir <- rep(NA_integer_, n_units)
 
   if (calculate_pvalues && valid_bootstrap) {
-    active <- !zero_mask
     # Bounded Monte Carlo p-value: p = (1 + r) / (B + 1), where r counts the
     # centred bootstrap differences at least as large in absolute value as
     # the observed difference. The unbounded form r / B admits p = 0, which
     # is anti-conservative and unbounded on the -log10 scale.
-    pvalue[active] <- (1 + rowSums(
-      abs(boot_diffs_c[active, , drop = FALSE]) >= abs(obs_diff[active])
-    )) / (B + 1)
+    pvalue[active] <- (1 + r_count) / (B + 1)
 
-    sig_pvalue[active] <- as.integer(pvalue[active] <= alpha)
+    # Under a correction units are flagged on the adjusted p-values; the raw
+    # p-values are kept for the evidence surface and for reporting.
+    p_flag <- pvalue
+    if (correction != "none") {
+      pvalue_adj[active] <- stats::p.adjust(pvalue[active],
+                                            method = correction)
+      p_flag <- pvalue_adj
+    }
+    sig_pvalue[active] <- as.integer(p_flag[active] <= alpha)
     sig_pv_dir[active] <- ifelse(sig_pvalue[active] == 1L,
                                  as.integer(sign(obs_diff[active])), 0L)
   }
@@ -440,7 +528,6 @@ sppt <- function(data,
   # -- 9. Robust S index and sameness test ------------------------------------
   # The denominator excludes zero-zero units, so the robust index equals the
   # plain index whenever every unit contains at least one event.
-  n_eligible <- n_units - n_zero
 
   s_index_pv <- NA_real_
   n_sig_pv   <- NA_integer_
@@ -448,9 +535,11 @@ sppt <- function(data,
   if (calculate_pvalues && valid_bootstrap && n_eligible > 0L) {
     n_sig_pv   <- sum(sig_pvalue[!zero_mask] == 1L, na.rm = TRUE)
     s_index_pv <- 1 - n_sig_pv / n_eligible
-    # Only calibrated under the symmetric bootstrap: fix_base = TRUE breaks
-    # the null flagging rate at sparse units.
-    if (!fix_base)
+    # Only calibrated for uncorrected p-values under the symmetric bootstrap:
+    # a correction moves the null flagging rate away from alpha (under
+    # sameness it flags no unit at all in most samples), and fix_base = TRUE
+    # breaks it at sparse units.
+    if (correction == "none" && !fix_base)
       sameness <- sppt_sameness(s_index_pv, n_sig_pv, n_eligible, alpha,
                                 tau = sameness_tau)
   }
@@ -511,6 +600,7 @@ sppt <- function(data,
 
   if (calculate_pvalues) {
     result$pvalue          <- round(pvalue, 6)
+    if (correction != "none") result$pvalue_adj <- round(pvalue_adj, 6)
     result$sig_pvalue      <- sig_pvalue
     result$sig_pvalue_dir  <- sig_pv_dir
     result$signed_evidence <- round(
@@ -554,6 +644,10 @@ sppt <- function(data,
     if (n_eligible < n_units * 0.75)
       say(field_lines("", paste("Many units are empty in both patterns;",
                                 "the sameness test is conservative here.")))
+  } else if (calculate_pvalues && !is.na(s_index_pv) && correction != "none") {
+    say(field_lines("Sameness", paste(
+      "not reported: under a correction the number of units flagged by",
+      "chance is no longer binomial with rate alpha")))
   } else if (calculate_pvalues && !is.na(s_index_pv) && fix_base) {
     say(field_lines("Sameness", "not reported (not calibrated for fix_base = TRUE)"))
   }
@@ -606,6 +700,8 @@ sppt <- function(data,
     lambda_min       = lambda_min,
     B                = B,
     alpha            = if (calculate_pvalues) alpha else NULL,
+    correction       = correction,
+    B_note           = B_note,
     s_index_pv       = s_index_pv,
     n_sig_pv         = n_sig_pv,
     sameness         = sameness,
@@ -664,6 +760,89 @@ sppt <- function(data,
 }
 
 # -- Internal helpers ---------------------------------------------------------
+
+# Number of bootstrap replicates for B = "auto". Three requirements, the
+# largest wins, rounded up to a number ending in 999:
+#   * a minimum of 4999;
+#   * Monte Carlo standard error of a p-value at alpha no more than 10% of
+#     alpha, sqrt(alpha (1 - alpha) / B) <= 0.1 alpha, so
+#     B >= 100 (1 - alpha) / alpha;
+#   * under a correction, the smallest attainable p-value, 1 / (B + 1), small
+#     enough for the most significant of n tests to survive it:
+#     1 / (B + 1) <= alpha / n, or alpha / (n H_n) for BY, where
+#     H_n = 1 + 1/2 + ... + 1/n.
+choose_B <- function(alpha, n_tests, correction = "none") {
+  round_up <- function(x) {
+    k <- max(3, floor(log10(x)) - 1)
+    as.integer(ceiling((x + 1) / 10^k) * 10^k - 1)
+  }
+  n_tests <- max(n_tests, 1L)
+  need <- c(minimum = 4999,
+            alpha = 100 * (1 - alpha) / alpha,
+            correction = if (correction == "none") 0 else
+              n_tests * (if (correction == "BY")
+                sum(1 / seq_len(n_tests)) else 1) / alpha)
+  list(B = round_up(max(need)),
+       binding = names(need)[which.max(need)],
+       B_correction = if (correction == "none") 0L else
+         round_up(need[["correction"]]))
+}
+
+# P-value exceedance counts computed in blocks of replicates. Two passes over
+# the same random numbers: the first finds each unit's mean bootstrap
+# difference (the centre), the second counts centred differences at least as
+# large as the observed one. The base and test streams are kept apart by
+# saving and restoring the generator state, so the replicates, and hence the
+# counts, are those of the single-matrix calculation, up to floating-point
+# rounding of the centre. The generator is left where that calculation would
+# leave it.
+blocked_counts <- function(N_a, N_b, p_a, p_b, B, fix_base, scale_factor,
+                           obs_diff, active) {
+  n <- length(p_a)
+  block <- max(1L, as.integer(getOption("sppt.block_cells", 5e6) %/% n))
+  sizes <- diff(unique(c(seq.int(0L, B, by = block), B)))
+  if (!exists(".Random.seed", envir = globalenv(), inherits = FALSE))
+    stats::runif(1L)
+  get_seed <- function() get(".Random.seed", envir = globalenv(),
+                             inherits = FALSE)
+  put_seed <- function(x) assign(".Random.seed", x, envir = globalenv())
+
+  # Pass 1: row sums of the counts, base stream then test stream
+  s0 <- get_seed()
+  sum_a <- numeric(n)
+  if (!fix_base)
+    for (m in sizes) sum_a <- sum_a + rowSums(stats::rmultinom(m, N_a, p_a))
+  s1 <- get_seed()
+  sum_b <- numeric(n)
+  for (m in sizes) sum_b <- sum_b + rowSums(stats::rmultinom(m, N_b, p_b))
+  s2 <- get_seed()
+  mean_a <- if (fix_base) p_a * scale_factor else sum_a / B / N_a * scale_factor
+  centre <- sum_b / B / N_b * scale_factor - mean_a
+
+  # Pass 2: the same draws again, paired block by block
+  act <- which(active)
+  obs <- abs(obs_diff[act])
+  r <- numeric(length(act))
+  sa <- s0
+  sb <- s1
+  for (m in sizes) {
+    if (fix_base) {
+      a <- p_a[act] * scale_factor
+    } else {
+      put_seed(sa)
+      a <- stats::rmultinom(m, N_a, p_a)[act, , drop = FALSE] / N_a *
+        scale_factor
+      sa <- get_seed()
+    }
+    put_seed(sb)
+    b <- stats::rmultinom(m, N_b, p_b)[act, , drop = FALSE] / N_b *
+      scale_factor
+    sb <- get_seed()
+    r <- r + rowSums(abs(b - a - centre[act]) >= obs)
+  }
+  put_seed(s2)
+  r
+}
 
 fmt_p <- function(p) if (p < 0.0001) "< 0.0001" else sprintf("= %.4f", p)
 
@@ -786,7 +965,10 @@ summary.sppt_result <- function(object, ...) {
   cat(field_lines("Units", sprintf("%d (%d eligible, %d empty in both)",
                                    s$n_units, s$n_eligible, s$n_zero)))
   cat(field_lines("lambda_min", sprintf("%.3f", s$lambda_min)))
-  cat(field_lines("Bootstrap B", s$B))
+  cat(field_lines("Bootstrap B", if (is.null(s$B_note)) s$B else
+    sprintf("%d (%s)", s$B, s$B_note)))
+  if (!is.null(s$correction) && s$correction != "none")
+    cat(field_lines("Correction", s$correction))
   if (!is.null(s$alpha) && !is.na(s$s_index_pv))
     cat(field_lines("Robust S", sprintf("%.4f (alpha = %.3f; %d differ)",
                                         s$s_index_pv, s$alpha, s$n_sig_pv)))
