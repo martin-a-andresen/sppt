@@ -8,16 +8,18 @@ sppt(
   data,
   group_col = "group",
   count_col,
-  B = 4999L,
+  B = "auto",
   seed = NULL,
   alpha = 0.05,
   calculate_pvalues = TRUE,
   sameness_tau = 0.05,
   arrangement = TRUE,
   nsim_moran = 999L,
+  correction = "none",
   calculate_ci = FALSE,
   conf_level = 0.85,
   fix_base = FALSE,
+  random_by = "exposure",
   use_percentages = TRUE,
   verbose = TRUE,
   create_maps = TRUE,
@@ -37,10 +39,16 @@ sppt(
 each spatial unit (for example \code{"DAUID"} or \code{"CTUID"}).}
 
 \item{count_col}{Character vector of length 2 giving the base and test
-count columns, in that order (for example \code{c("BNER2003", "BNER2025")}).}
+count columns, in that order (for example \code{c("BNER2003", "BNER2025")}).
+One element may be \code{"random"}, or a single column may be given alone,
+to test that column against a random distribution of its events (see
+Details); a single column is tested as \code{c("random", column)}, so that
+positive differences mark units with more events than random.}
 
-\item{B}{Integer. Number of bootstrap replicates. Default \code{4999}; an odd
-value avoids ties.}
+\item{B}{\code{"auto"} (default) or an integer of at least 99: the number of
+bootstrap replicates. \code{"auto"} chooses it from \code{alpha}, the number of
+eligible units and \code{correction} (see Details). An integer is used as
+given; an odd value avoids ties.}
 
 \item{seed}{Integer or \code{NULL}. Random seed for reproducibility.}
 
@@ -63,6 +71,10 @@ Requires polygon geometry. Default \code{TRUE}.}
 \item{nsim_moran}{Integer. Permutations for the global Moran's I test.
 Default \code{999}.}
 
+\item{correction}{Character. Multiple testing correction, a method of
+\code{\link[stats:p.adjust]{stats::p.adjust()}}: \code{"none"} (default), \code{"BY"}, \code{"BH"}, \code{"bonferroni"},
+\code{"holm"}, \code{"hochberg"} or \code{"hommel"}. See Details.}
+
 \item{calculate_ci}{Logical. Also compute marginal bootstrap confidence
 intervals and the CI-based S index (Andresen 2009). Default \code{FALSE}.}
 
@@ -77,6 +89,12 @@ used when \code{calculate_ci = TRUE}.}
 and its observed proportions are treated as fixed. This gives an
 asymmetric test, intended only for comparison against a known reference
 distribution. Default \code{FALSE}.}
+
+\item{random_by}{How the random distribution spreads events when one
+pattern is \code{"random"}. \code{"exposure"} (default): in proportion to each
+unit's area for polygons or length for lines (street segments, say).
+\code{"units"}: equal probability for every unit. Or the name of a
+non-negative numeric column in \code{data} to use as the exposure.}
 
 \item{use_percentages}{Logical. Express proportions as percentages
 (0-100) rather than as proportions (0-1). Default \code{TRUE}.}
@@ -122,7 +140,9 @@ for every row).}
 \item{\code{low_power_warning}}{\code{TRUE} when \code{lambda_min < 1.5}.}
 \item{\code{pvalue}}{Bootstrap p-value; \code{NA} for units empty in both
 patterns.}
-\item{\code{sig_pvalue}}{1 if \code{pvalue <= alpha}, otherwise 0.}
+\item{\code{pvalue_adj}}{Adjusted p-value (only with a \code{correction}).}
+\item{\code{sig_pvalue}}{1 if the unit is flagged at \code{alpha} (on the adjusted
+p-value under a correction), otherwise 0.}
 \item{\code{sig_pvalue_dir}}{1 = test > base, -1 = base > test, 0 = not
 significant.}
 \item{\code{signed_evidence}}{\eqn{\mathrm{sign}(d) \times -\log_{10}(p)}.}
@@ -136,7 +156,8 @@ confidence bounds for base and test (CI only).}
 not (CI only).}
 \item{\code{sig_ci_dir}}{Direction of CI-based differences (CI only).}
 }
-The attribute \code{"sppt_summary"} holds the robust S index, the sameness and
+The attribute \code{"sppt_summary"} holds the robust S index, \eqn{S_D} and
+the dissimilarity index (element \code{similarity}), the sameness and
 arrangement tests, the tier counts and the settings; \code{summary()} prints
 it. The attribute \code{"sppt_maps"} holds the maps as a named list of
 \code{ggplot} objects (\code{difference}, \code{pvalue}, \code{tiers} with the arrangement
@@ -179,13 +200,85 @@ multinomial distribution of observed shares is the closed-form equivalent.
 Locations are never permuted, so the null is sampling variability around
 the observed intensity surface, not spatial randomness.
 
-\strong{Multiple testing.} No correction is applied. Simulation evidence
-shows that corrections remove power at fine spatial scales without a
-meaningful benefit in false discovery rate, and that at coarse scales a
-stricter \code{alpha} achieves the same as a correction. The sameness and
-arrangement tests and \code{\link[=sppt_clusters]{sppt_clusters()}} address the global question
-instead. The raw p-values are returned, so a correction can still be
-applied with \code{\link[stats:p.adjust]{stats::p.adjust()}} if required.
+\strong{Testing against a random distribution.} With \code{count_col = "BNER2021"}
+or \code{c("random", "BNER2021")}, the column is compared with a random
+allocation of its own total to the units. By default
+(\code{random_by = "exposure"}) each event is placed in a unit with probability
+in proportion to the unit's exposure: its area for polygons, its length
+for lines such as street segments. \code{random_by = "units"} gives every unit
+equal probability, and the name of a numeric column (population, say)
+uses that column as the exposure. The random distribution is
+known exactly, so the test is a Monte Carlo test against it: \code{B} random
+allocations give each unit's envelope of shares, and the p-value is the
+share of allocations that depart from the expected share by at least as
+much as the observed pattern does, \eqn{p = (1 + r)/(B + 1)}. Every unit
+with any exposure is eligible, including units with no events, which are
+informative here. Everything else is reported as usual: the S index and
+its sameness test (now: no more different than a random allocation),
+\eqn{S_D} and \eqn{D} (here \eqn{D} measures how concentrated the pattern
+is relative to its exposure, a Hoover-type index of concentration), the
+arrangement test, tiers and maps.
+The expected counts of the random pattern are added as column \code{random}.
+Confidence intervals and \code{fix_base} do not apply.
+
+\strong{Sameness and degree of similarity.} The S index tests sameness: two
+realisations of one process give \eqn{S \approx 1 - \alpha}, and the
+sameness test asks whether S is lower than that. It does not measure how
+similar two patterns are. For that, \code{sppt()} also reports
+\deqn{S_D = 1 - \frac{1}{2}\sum_{i \in F} |p_{bi} - p_{ai}|,}{S_D = 1 -
+1/2 * sum over flagged units of |p_bi - p_ai|,}
+where \eqn{p_{ai}} and \eqn{p_{bi}} are unit \eqn{i}'s shares of all
+events in the base and test patterns (as proportions) and \eqn{F} is the
+set of units flagged at \code{alpha}. Summed over all units, half the absolute
+difference in shares is the index of dissimilarity, \eqn{D} (Duncan and
+Duncan 1955), the share of either pattern that would have to move to other
+units to reproduce the other pattern (Hoover 1936). \eqn{S_D} limits that
+sum to the units the test flags. It lies in [0, 1], is symmetric in
+base and test, and is at least \eqn{1 - D}. Over the flagged units the
+shares where each pattern is higher need not balance, so \eqn{1 - S_D}
+approximates, and never exceeds, the share of either pattern that would
+have to move to remove the flagged differences: the larger of the two
+flagged totals. The report prints both totals and the events to move
+(that larger total times each pattern's total). Where power is limited, many
+genuine differences go unflagged and \eqn{S_D} overstates similarity; the
+share of \eqn{D} held by flagged units, \eqn{(1 - S_D)/D}, shows how much
+of the total dissimilarity the flags capture, and a note is printed when
+it is below 0.6, a judgement call rather than a calibrated threshold.
+\eqn{S_D} always uses the uncorrected flags, \eqn{p \le \alpha}. See
+\code{\link[=sppt_similarity]{sppt_similarity()}}.
+
+\strong{Multiple testing.} No correction is applied by default. Simulation
+evidence shows that corrections remove much of the power at fine spatial
+scales, and that at coarse scales a stricter \code{alpha} achieves much the same
+as a correction; the sameness and arrangement tests and \code{\link[=sppt_clusters]{sppt_clusters()}}
+address the global question instead. Where a list of units with
+controlled error is wanted, \code{correction} applies a method of
+\code{\link[stats:p.adjust]{stats::p.adjust()}}. \code{"BY"} (Benjamini and Yekutieli) controls the false
+discovery rate under any dependence between units, which the fixed totals
+of the two patterns create, so it is the safe choice; \code{"BH"} assumes
+independent or positively dependent tests. With a correction, \code{pvalue}
+holds the raw p-values, \code{pvalue_adj} the adjusted ones, units are flagged
+on the adjusted values, the S index counts those flags, and the sameness
+test is not reported, because the number of units flagged by chance is no
+longer binomial with rate \code{alpha}. The arrangement test and the tiers use
+the raw p-values for the evidence surface and the corrected flags for the
+tiers.
+
+\strong{Number of replicates.} With \code{B = "auto"} (default) the number of
+replicates is the largest of three requirements, rounded up to a number
+ending in 999: a minimum of 4999; a Monte Carlo standard error of a
+p-value at \code{alpha} no more than 10\% of \code{alpha}, which needs
+\eqn{B \ge 100(1 - \alpha)/\alpha}; and, under a correction, a smallest
+attainable p-value, \eqn{1/(B + 1)}, small enough for the most significant
+unit to survive it, \eqn{B + 1 \ge n/\alpha} for most methods and
+\eqn{B + 1 \ge n H_n/\alpha} for BY, where \eqn{n} is the number of
+eligible units and \eqn{H_n = 1 + 1/2 + \cdots + 1/n}. So \code{B = "auto"}
+gives 4999 at \code{alpha = 0.05} without a correction, 9999 at \code{alpha = 0.01},
+and 129,999 for BY at \code{alpha = 0.05} across 824 units. Large numbers of
+replicates are computed in blocks, so memory does not grow with \code{B}; the
+result is the same as the single-matrix calculation. The confidence
+interval option needs the full matrices, so with \code{calculate_ci = TRUE}
+memory grows with \eqn{n \times B}.
 
 \strong{Power.} \code{lambda_min}, the mean number of events per unit in the rarer
 pattern, governs power. Below 1.5 a low-power warning is issued and below
@@ -243,8 +336,16 @@ Andresen, M.A. (2026). Testing longitudinal change in spatial
 distributions and patterns: An extension of the spatial point pattern
 test. \emph{Annals of the American Association of Geographers}, in press.
 \doi{10.1080/24694452.2026.2733304}
+
+Duncan, O.D. and Duncan, B. (1955). A methodological analysis of
+segregation indexes. \emph{American Sociological Review}, 20, 210-217.
+\doi{10.2307/2088328}
+
+Hoover, E.M. (1936). The measurement of industrial localization. \emph{The
+Review of Economic Statistics}, 18, 162-171.
 }
 \seealso{
-\code{\link[=sppt_longitudinal]{sppt_longitudinal()}}, \code{\link[=sppt_sameness]{sppt_sameness()}}, \code{\link[=sppt_clusters]{sppt_clusters()}},
+\code{\link[=sppt_longitudinal]{sppt_longitudinal()}}, \code{\link[=sppt_sameness]{sppt_sameness()}}, \code{\link[=sppt_similarity]{sppt_similarity()}},
+\code{\link[=sppt_clusters]{sppt_clusters()}},
 \code{\link[=sppt_map]{sppt_map()}}, \link{vancouver_ct}
 }

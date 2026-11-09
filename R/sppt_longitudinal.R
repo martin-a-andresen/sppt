@@ -18,6 +18,15 @@
 #'   period is significant at `alpha`; trends are fitted only for units with
 #'   at least one significant period.
 #'
+#' **First against last period.** With p-values, the first and last
+#' periods are also compared as two patterns, as [sppt()] would: the robust
+#' S index over units not empty in both, its sameness test at
+#' `sameness_tau`, and the degree of similarity \eqn{S_D} with the index of
+#' dissimilarity \eqn{D} on the units flagged at `alpha` in the last period.
+#' This summarises how far the pattern moved over the whole series; the
+#' trends describe how it got there. The sameness test is not reported with
+#' `fix_base = TRUE`.
+#'
 #' Trends are ordinary least squares fits of each unit's share (or count)
 #' on time, linear or quadratic, tested at `trend_alpha`. Units are also
 #' grouped into Jenks natural-breaks classes of their base-period count, and
@@ -26,10 +35,16 @@
 #' as sustained zeros.
 #'
 #' @inheritParams sppt
+#' @param B `"auto"` (default) or an integer of at least 99: the number of
+#'   bootstrap replicates for each period. `"auto"` chooses it from `alpha`
+#'   as in [sppt()]: 4999 at `alpha = 0.05`, 9999 at `alpha = 0.01`. Memory
+#'   grows with the number of periods times units times `B`.
 #' @param count_col Character vector of three or more count columns, one per
 #'   period, in time order (for example `paste0("BNER", 2003:2025)`). The
 #'   first is the base period. Column names should end in the period number,
 #'   which is used to label the time axis.
+#' @param sameness_tau Numeric in (0, 1). Significance level of the sameness
+#'   test for the first against the last period. Default `0.05`.
 #' @param prefix Character or `NULL`. Prefix for the output column names, so
 #'   that results for several crime types can sit in one object. `NULL`
 #'   (default) derives it from `count_col`, for example `"BNER_"`.
@@ -109,6 +124,10 @@
 #'   \item{`jenks_level`, `jenks_min`, `jenks_max`, `baseline_interval`}{Jenks
 #'     class of the base-period count, its bounds and label.}
 #' }
+#' The comparison of the first and last periods is stored as
+#' `attr(x, "first_last")`: the robust S index, its sameness test and the
+#' degree of similarity \eqn{S_D} with the index of dissimilarity \eqn{D}
+#' (see [sppt()] and [sppt_similarity()]).
 #' The S indices, Jenks breaks, trend tables and p-value matrix are stored as
 #' attributes (for example `attr(x, "s_index_overlap")`,
 #' `attr(x, "interval_table_linear")`, `attr(x, "pvalue_matrix")`). With
@@ -144,9 +163,10 @@
 sppt_longitudinal <- function(data,
                               group_col           = "group",
                               count_col,
-                              B                   = 4999L,
+                              B                   = "auto",
                               seed                = NULL,
                               alpha               = 0.05,
+                              sameness_tau        = 0.05,
                               calculate_pvalues   = TRUE,
                               conf_level          = 0.85,
                               fix_base            = FALSE,
@@ -197,11 +217,27 @@ sppt_longitudinal <- function(data,
       stop("`count_col` column '", cc, "' contains negative values.",
            call. = FALSE)
   }
-  if (!is.numeric(B) || length(B) != 1L || B < 99)
-    stop("`B` must be a single integer >= 99.", call. = FALSE)
+  if (is.character(B) && length(B) == 1L && identical(tolower(B), "auto")) {
+    if (!is.numeric(alpha) || length(alpha) != 1L || alpha <= 0 || alpha >= 1)
+      stop("`alpha` must be a single numeric value in (0, 1).", call. = FALSE)
+    B <- choose_B(alpha, nrow(data))$B
+  } else if (!is.numeric(B) || length(B) != 1L || is.na(B) || B < 99) {
+    stop("`B` must be \"auto\" or a single integer >= 99.", call. = FALSE)
+  }
   B <- as.integer(B)
+  # One n x B matrix is kept per period for the p-values
+  if (as.numeric(nrow(data)) * B * length(count_col) > 2.5e8)
+    warning(sprintf(paste0(
+      "%d periods x %d units x %d replicates need about %.1f GB of memory. ",
+      "Consider fewer periods, coarser units or a smaller B."),
+      length(count_col), nrow(data), B,
+      8 * length(count_col) * nrow(data) * B / 1e9), call. = FALSE)
   if (!is.numeric(alpha) || length(alpha) != 1L || alpha <= 0 || alpha >= 1)
     stop("`alpha` must be a single numeric value in (0, 1).", call. = FALSE)
+  if (!is.numeric(sameness_tau) || length(sameness_tau) != 1L ||
+      sameness_tau <= 0 || sameness_tau >= 1)
+    stop("`sameness_tau` must be a single numeric value in (0, 1).",
+         call. = FALSE)
   if (!is.numeric(conf_level) || length(conf_level) != 1L ||
       conf_level <= 0 || conf_level >= 1)
     stop("`conf_level` must be a single numeric value in (0, 1).",
@@ -678,6 +714,13 @@ sppt_longitudinal <- function(data,
                     pv("Trend_p"))
 
   # ---------------------------------------------------------------------------
+  # First against last period: S index, sameness test and S_D
+  # ---------------------------------------------------------------------------
+  first_last <- if (calculate_pvalues)
+    first_last_compare(C_mat[, 1L], C_mat[, T_], pvalue_matrix[, T_], alpha,
+                       sameness_tau, fix_base, count_col[1L], count_col[T_])
+
+  # ---------------------------------------------------------------------------
   # Console report
   # ---------------------------------------------------------------------------
   if (verbose)
@@ -689,6 +732,8 @@ sppt_longitudinal <- function(data,
       nonzero_obs = nonzero_obs, first_period = first_period,
       jenks_k = jenks_k, jenks_gvf_threshold = jenks_gvf_threshold,
       it_env = it_env, it_p = it_p, calculate_pvalues = calculate_pvalues)
+  if (verbose && !is.null(first_last))
+    say(first_last_lines(first_last))
 
   # ---------------------------------------------------------------------------
   # Export tables
@@ -731,11 +776,13 @@ sppt_longitudinal <- function(data,
         unname(si_p$robust[[nm]])
     attr(result, "interval_table_p_linear") <- it_p$linear
     attr(result, "interval_table_p_quad")   <- it_p$quad
+    attr(result, "first_last")              <- first_last
   }
   attr(result, "sppt_long_meta") <- list(
     prefix = prefix, trend_type = trend_type, alpha = alpha,
     calculate_pvalues = calculate_pvalues, count_col = count_col,
     conf_level = conf_level, trend_alpha = trend_alpha, B = B,
+    sameness_tau = sameness_tau,
     n_units = N, nonzero_units = nonzero_obs, jenks_k = jenks_k,
     totals = stats::setNames(as.numeric(totals_vec), count_col))
   class(result) <- c("sppt_long_result", class(result))
@@ -1224,12 +1271,17 @@ summary.sppt_long_result <- function(object, ...) {
   cat(rule_line("-"))
   tab_text <- function(tb)
     paste(sprintf("%s: %d", names(tb), as.integer(tb)), collapse = ", ")
+  fl <- attr(object, "first_last")
+  if (!is.null(fl)) {
+    cat(first_last_lines(fl, rule = FALSE))
+    cat(rule_line("-"))
+  }
   if (!is.null(trend_p)) cat(field_lines("Trend_p codes", tab_text(trend_p)))
   cat(field_lines("Trend codes", tab_text(trend_env)))
   cat(field_lines("", "see ?sppt_longitudinal for the trend codes"))
   cat(rule_line("="), "\n", sep = "")
 
-  invisible(list(meta = meta,
+  invisible(list(meta = meta, first_last = fl,
                  indices = list(envelope = rbind(all = env_all,
                                                  robust = env_rob),
                                 pvalue = if (!is.null(p_all))
@@ -1243,4 +1295,47 @@ print.sppt_long_result <- function(x, ...) {
   summary(x)
   NextMethod()
   invisible(x)
+}
+
+# First against last period, on the last column of the p-value matrix.
+first_last_compare <- function(cnt_first, cnt_last, p_last, alpha, tau,
+                               fix_base, name_first, name_last) {
+  cnt_first[is.na(cnt_first)] <- 0
+  cnt_last[is.na(cnt_last)]   <- 0
+  elig <- !(cnt_first == 0 & cnt_last == 0)
+  flag <- elig & !is.na(p_last) & p_last <= alpha
+  n_el <- sum(elig)
+  n_f  <- sum(flag)
+  S    <- if (n_el > 0) 1 - n_f / n_el else NA_real_
+  list(base_name = name_first, test_name = name_last, alpha = alpha,
+       n_eligible = n_el, n_sig = n_f, s_index = S,
+       n_up = sum(flag & cnt_last / sum(cnt_last) > cnt_first / sum(cnt_first)),
+       n_down = sum(flag & cnt_last / sum(cnt_last) < cnt_first / sum(cnt_first)),
+       sameness = if (!fix_base && n_el > 0)
+         sppt_sameness(S, n_f, n_el, alpha, tau = tau),
+       similarity = similarity_d(cnt_first, cnt_last, flag))
+}
+
+first_last_lines <- function(fl, rule = TRUE) {
+  out <- paste0(
+    if (rule) paste0(rule_line("="), "First against last period\n",
+                     rule_line("=")) else "",
+    field_lines("Periods", sprintf("%s (base) against %s", fl$base_name,
+                                   fl$test_name)),
+    field_lines("Robust S", sprintf("%.4f (%d of %d units differ)",
+                                    fl$s_index, fl$n_sig, fl$n_eligible)),
+    field_lines("", sprintf("%d units %s > %s", fl$n_up, fl$test_name,
+                            fl$base_name)),
+    field_lines("", sprintf("%d units %s > %s", fl$n_down, fl$base_name,
+                            fl$test_name)),
+    similarity_lines(fl$similarity, fl$base_name, fl$test_name))
+  sm <- fl$sameness
+  if (!is.null(sm) && !is.na(sm$p_value))
+    out <- paste0(out, field_lines("Sameness", sprintf(
+      "p %s (%s); S >= %.4f needed at tau = %.2f; %s",
+      fmt_p(sm$p_value), sm$method, sm$threshold, sm$tau,
+      if (isTRUE(sm$same))
+        "no more different than two realisations of one process"
+      else "more different than two realisations of one process")))
+  if (rule) paste0(out, rule_line("="), "\n") else out
 }

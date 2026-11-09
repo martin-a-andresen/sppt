@@ -9,6 +9,12 @@
   with `calculate_ci = TRUE`, and all envelope results of
   `sppt_longitudinal()`, differ from version 1.0.0. P-value results are
   unchanged.
+* `B` now defaults to `"auto"` in `sppt()` and `sppt_longitudinal()`. The
+  number of replicates is the largest of a minimum of 4999, enough for a
+  Monte Carlo standard error at `alpha` of at most 10% of `alpha`, and,
+  under a correction, enough for the most significant unit to survive it.
+  At `alpha = 0.05` without a correction this is 4999, as before, so default
+  results are unchanged. An integer can still be given.
 
 ## New features
 
@@ -18,11 +24,42 @@
   and a new tier map is available as `sppt_map(res, "tiers")`.
 * `sppt()` notes a widespread shift (most flagged units share one direction
   and lie outside any cluster) and adds it to the two-way verdict.
+* `sppt()` reports a degree of similarity, S_D: one minus half the sum of
+  absolute differences in shares over the flagged units, alongside the index
+  of dissimilarity D (Duncan and Duncan 1955), the share of D held by
+  flagged units, the flagged share differences in each direction, and the
+  share and number of events of each pattern that would have to move to
+  remove the flagged differences (the larger of the two directions, which
+  1 - S_D approximates from below). A note is printed when flagged units
+  hold less than 60% of D. S tests
+  sameness; S_D measures how similar two patterns are. New
+  `sppt_similarity()` returns these values from a result.
+* `sppt()` tests a single pattern against a random distribution:
+  `count_col = "BNER2021"` or `c("random", "BNER2021")` compares the column
+  with random allocations of its own total to the units, in proportion to
+  each unit's exposure: area for polygons, length for lines such as street
+  segments (`random_by = "exposure"`, the default). `random_by = "units"`
+  gives equal probability per unit; naming a numeric column uses it as the
+  exposure.
+  The test is a Monte Carlo test against the random envelope, and all the
+  usual output follows (S and sameness, S_D and D, arrangement, tiers, maps).
+* `sppt_longitudinal()` compares the first and last periods as two
+  patterns: robust S with its sameness test (new argument `sameness_tau`),
+  and S_D with D, printed in the report and `summary()` and stored as
+  `attr(x, "first_last")`.
 * New `sppt_clusters()` tests clusters of flagged units against the
   clusters that false positives alone produce on the same map, under the
   one-gap or contiguous rule. Clusters are built within each direction of
   difference by default; `direction = FALSE` reproduces the published
   reference values.
+* `sppt()` gains `correction` for multiple testing corrections (methods of
+  `p.adjust()`; `"BY"` controls the false discovery rate under any
+  dependence). Raw p-values stay in `pvalue` and adjusted ones go in
+  `pvalue_adj`; units are flagged on the adjusted values and the sameness
+  test is not reported under a correction.
+* Large numbers of replicates are computed in blocks, so memory no longer
+  grows with `B` (without `calculate_ci`). Results are the same as the
+  single-matrix calculation.
 * `plot()` methods for `sppt()` and `sppt_longitudinal()` results.
 * `sppt_longitudinal()` results now have class `sppt_long_result`, with
   `summary()` and `print()` methods.

@@ -1,6 +1,6 @@
-run_sppt <- function(...) {
+run_sppt <- function(..., B = 199) {
   sppt(vancouver_ct, group_col = "id", count_col = c("BNER2003", "BNER2025"),
-       B = 199, seed = 1, verbose = FALSE, create_maps = FALSE, ...)
+       B = B, seed = 1, verbose = FALSE, create_maps = FALSE, ...)
 }
 
 test_that("p-values are bounded below by 1 / (B + 1)", {
@@ -28,7 +28,8 @@ test_that("exporting without a directory is an error", {
 })
 
 test_that("inputs are validated", {
-  expect_error(sppt(vancouver_ct, group_col = "id", count_col = "BNER2003"),
+  expect_error(sppt(vancouver_ct, group_col = "id",
+                    count_col = c("BNER2003", "BNER2004", "BNER2005")),
                "length 2")
   expect_error(sppt(vancouver_ct, group_col = "nope",
                     count_col = c("BNER2003", "BNER2025")), "not found")
@@ -68,8 +69,47 @@ test_that("cluster outlines carry the sign of their label", {
   expect_true(all(res$difference[res$moran_ll] < 0))
 })
 
-test_that("sppt() has no correction argument", {
-  expect_false("correction" %in% names(formals(sppt)))
+test_that("B = \"auto\" follows alpha and the correction", {
+  cb <- sppt:::choose_B
+  expect_equal(cb(0.05, 1000)$B, 4999L)
+  expect_equal(cb(0.10, 1000)$B, 4999L)
+  expect_equal(cb(0.01, 1000)$B, 9999L)
+  expect_equal(cb(0.005, 1000)$B, 19999L)
+  # Bonferroni: 1 / (B + 1) <= alpha / n
+  b <- cb(0.05, 824, "bonferroni")$B
+  expect_lte(1 / (b + 1), 0.05 / 824)
+  # BY: 1 / (B + 1) <= alpha / (n H_n)
+  b <- cb(0.05, 824, "BY")$B
+  expect_lte(1 / (b + 1), 0.05 / (824 * sum(1 / 1:824)))
+  expect_equal(attr(run_sppt(arrangement = FALSE, B = "auto"),
+                    "sppt_summary")$B, 4999L)
+  expect_error(run_sppt(B = "lots"), "auto")
+})
+
+test_that("blocked p-values equal the single-matrix calculation", {
+  full <- run_sppt(arrangement = FALSE)
+  withr_opts <- options(sppt.max_cells = 1000, sppt.block_cells = 3000)
+  on.exit(options(withr_opts))
+  blk <- run_sppt(arrangement = FALSE)
+  expect_equal(blk$pvalue, full$pvalue)
+  # The generator ends in the same state either way
+  set.seed(9); invisible(run_sppt(arrangement = FALSE)); x <- runif(1)
+  options(withr_opts)
+  set.seed(9); invisible(run_sppt(arrangement = FALSE)); y <- runif(1)
+  expect_identical(x, y)
+})
+
+test_that("a correction keeps raw p-values and drops the sameness test", {
+  res <- run_sppt(arrangement = FALSE, correction = "BY", B = "auto")
+  s <- attr(res, "sppt_summary")
+  expect_true(all(res$pvalue_adj >= res$pvalue, na.rm = TRUE))
+  expect_identical(res$sig_pvalue, as.integer(res$pvalue_adj <= 0.05))
+  expect_null(s$sameness)
+  expect_equal(s$correction, "BY")
+  expect_gt(s$B, 4999L)
+  expect_warning(run_sppt(arrangement = FALSE, correction = "bonferroni",
+                          B = 199), "no unit can be")
+  expect_error(run_sppt(correction = "fdr"), "correction")
 })
 
 test_that("conf_level defaults to 0.85", {
@@ -113,4 +153,143 @@ test_that("console output fits in 70 columns", {
   expect_lte(wide(capture.output(summary(res))), 70)
   expect_lte(wide(capture.output(print(sppt_clusters(res, nsim = 99,
                                                      seed = 1)))), 70)
+})
+
+test_that("S_D and D follow their definitions", {
+  res <- sppt(vancouver_ct, group_col = "id",
+              count_col = c("BNER2021", "BNEC2021"), B = 199, seed = 1,
+              verbose = FALSE, create_maps = FALSE, arrangement = FALSE)
+  x <- sppt_similarity(res)
+  a <- vancouver_ct$BNER2021 / sum(vancouver_ct$BNER2021)
+  b <- vancouver_ct$BNEC2021 / sum(vancouver_ct$BNEC2021)
+  flag <- res$sig_pvalue == 1L & !is.na(res$sig_pvalue)
+  # D does not depend on the bootstrap
+  expect_equal(round(x$dissimilarity_d, 5), 0.48485)
+  expect_equal(x$s_index_d, 1 - 0.5 * sum(abs(b - a)[flag]))
+  expect_gte(x$s_index_d, 1 - x$dissimilarity_d)
+  expect_equal(x$share_d_flagged, (1 - x$s_index_d) / x$dissimilarity_d)
+  # Flagged share differences by direction; the share to move is the larger
+  d <- b - a
+  expect_equal(x$flagged_test_higher, sum(d[flag & d > 0]))
+  expect_equal(x$flagged_base_higher, -sum(d[flag & d < 0]))
+  expect_equal(1 - x$s_index_d,
+               (x$flagged_test_higher + x$flagged_base_higher) / 2)
+  expect_equal(x$share_to_move, max(x$flagged_test_higher,
+                                    x$flagged_base_higher))
+  expect_gte(x$share_to_move, 1 - x$s_index_d)
+  expect_equal(x$events_to_move_base,
+               x$share_to_move * sum(vancouver_ct$BNER2021))
+  # Every unit flagged: the two directions balance and the share to move is D
+  all_f <- sppt:::similarity_d(vancouver_ct$BNER2021, vancouver_ct$BNEC2021,
+                               rep(TRUE, 127))
+  expect_equal(all_f$share_to_move, all_f$dissimilarity_d)
+  expect_equal(all_f$s_index_d, 1 - all_f$dissimilarity_d)
+  # Symmetric in base and test for the same flags
+  sw <- sppt:::similarity_d(vancouver_ct$BNEC2021, vancouver_ct$BNER2021, flag)
+  expect_equal(sw$s_index_d, x$s_index_d)
+  # Stored in the summary, printed by sppt() and summary()
+  expect_equal(attr(res, "sppt_summary")$similarity$s_index_d, x$s_index_d)
+  expect_output(summary(res), "S_D")
+  # Identical patterns give D = 0 and S_D = 1
+  same <- sppt:::similarity_d(1:5, 2 * (1:5), rep(TRUE, 5))
+  expect_equal(same$dissimilarity_d, 0)
+  expect_equal(same$s_index_d, 1)
+  expect_true(is.na(same$share_d_flagged))
+})
+
+test_that("the S_D note appears when flagged units hold little of D", {
+  out <- capture.output(suppressWarnings(sppt(
+    vancouver_da, group_col = "id", count_col = c("BNER2021", "BNEC2021"),
+    B = 4999, seed = 20261108L, create_maps = FALSE, arrangement = FALSE)))
+  expect_true(any(grepl("overstates similarity", out)))
+  out_ct <- capture.output(sppt(
+    vancouver_ct, group_col = "id", count_col = c("BNER2021", "BNEC2021"),
+    B = 4999, seed = 20261108L, create_maps = FALSE, arrangement = FALSE))
+  expect_false(any(grepl("overstates similarity", out_ct)))
+})
+
+test_that("a single column is tested against a random distribution", {
+  res <- sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
+              B = 199, seed = 1, verbose = FALSE, create_maps = FALSE,
+              arrangement = FALSE)
+  s <- attr(res, "sppt_summary")
+  expect_equal(s$base_name, "random")
+  expect_equal(s$random$side, "base")
+  expect_equal(s$random$by, "area")   # default exposure for polygons
+  a <- as.numeric(sf::st_area(vancouver_ct))
+  expect_equal(res$random, sum(vancouver_ct$BNER2021) * a / sum(a),
+               tolerance = 1e-6)
+  expect_equal(s$n_eligible, 127L)   # units with no events are eligible
+  same <- sppt(vancouver_ct, group_col = "id",
+               count_col = c("random", "BNER2021"), B = 199, seed = 1,
+               verbose = FALSE, create_maps = FALSE, arrangement = FALSE)
+  expect_equal(same$pvalue, res$pvalue)
+  # Either side can be random; p-values do not depend on the side
+  rev <- sppt(vancouver_ct, group_col = "id",
+              count_col = c("BNER2021", "random"), B = 199, seed = 1,
+              verbose = FALSE, create_maps = FALSE, arrangement = FALSE)
+  expect_equal(rev$pvalue, res$pvalue)
+  expect_equal(rev$sig_pvalue_dir, -res$sig_pvalue_dir)
+  expect_error(sppt(vancouver_ct, group_col = "id",
+                    count_col = c("random", "random")), "At most one")
+  expect_error(sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
+                    fix_base = TRUE), "fix_base")
+  un <- sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
+             random_by = "units", B = 199, seed = 1, verbose = FALSE,
+             create_maps = FALSE, arrangement = FALSE)
+  expect_equal(un$random, rep(sum(vancouver_ct$BNER2021) / 127, 127),
+               tolerance = 1e-6)
+  expect_equal(attr(un, "sppt_summary")$random$by, "units")
+})
+
+test_that("random_by uses length for lines and accepts an exposure column", {
+  # Street-segment-like layer: tract boundaries as lines
+  ln <- sf::st_cast(sf::st_boundary(vancouver_ct[1:40, ]), "MULTILINESTRING")
+  r_ln <- sppt(ln, group_col = "id", count_col = "BNER2021", B = 199,
+               seed = 1, verbose = FALSE, create_maps = FALSE,
+               arrangement = FALSE)
+  len <- as.numeric(sf::st_length(ln))
+  expect_equal(r_ln$random, sum(ln$BNER2021) * len / sum(len),
+               tolerance = 1e-6)
+  expect_equal(attr(r_ln, "sppt_summary")$random$by, "length")
+
+  d <- vancouver_ct
+  d$pop <- seq_len(127)
+  r_pop <- sppt(d, group_col = "id", count_col = "BNER2021",
+                random_by = "pop", B = 199, seed = 1, verbose = FALSE,
+                create_maps = FALSE, arrangement = FALSE)
+  expect_equal(r_pop$random, sum(d$BNER2021) * d$pop / sum(d$pop),
+               tolerance = 1e-6)
+  expect_equal(attr(r_pop, "sppt_summary")$random$by, "pop")
+
+  expect_error(sppt(d, group_col = "id", count_col = "BNER2021",
+                    random_by = "nope"), "no column")
+  d$chr <- "a"
+  expect_error(sppt(d, group_col = "id", count_col = "BNER2021",
+                    random_by = "chr"), "numeric")
+  d$neg <- c(-1, rep(1, 126))
+  expect_error(sppt(d, group_col = "id", count_col = "BNER2021",
+                    random_by = "neg"), "non-negative")
+  d$z <- c(0, rep(1, 126))
+  expect_warning(sppt(d, group_col = "id", count_col = "BNER2021",
+                      random_by = "z", B = 199, seed = 1, verbose = FALSE,
+                      create_maps = FALSE, arrangement = FALSE),
+                 "zero exposure")
+  pts <- suppressWarnings(sf::st_centroid(vancouver_ct))
+  expect_error(sppt(pts, group_col = "id", count_col = "BNER2021"),
+               "polygons \\(area\\) or all lines")
+})
+
+test_that("the random test flags at about alpha when the pattern is random", {
+  set.seed(3)
+  d <- vancouver_ct
+  a <- as.numeric(sf::st_area(d))
+  rate <- mean(replicate(40, {
+    d$x <- as.integer(stats::rmultinom(1, 1000, a / sum(a)))
+    mean(sppt(d, group_col = "id", count_col = "x", B = 499,
+              verbose = FALSE, create_maps = FALSE,
+              arrangement = FALSE)$sig_pvalue)
+  }))
+  expect_gt(rate, 0.025)
+  expect_lt(rate, 0.065)
 })

@@ -8,9 +8,10 @@ sppt_longitudinal(
   data,
   group_col = "group",
   count_col,
-  B = 4999L,
+  B = "auto",
   seed = NULL,
   alpha = 0.05,
+  sameness_tau = 0.05,
   calculate_pvalues = TRUE,
   conf_level = 0.85,
   fix_base = FALSE,
@@ -49,8 +50,10 @@ period, in time order (for example \code{paste0("BNER", 2003:2025)}). The
 first is the base period. Column names should end in the period number,
 which is used to label the time axis.}
 
-\item{B}{Integer. Number of bootstrap replicates. Default \code{4999}; an odd
-value avoids ties.}
+\item{B}{\code{"auto"} (default) or an integer of at least 99: the number of
+bootstrap replicates for each period. \code{"auto"} chooses it from \code{alpha}
+as in \code{\link[=sppt]{sppt()}}: 4999 at \code{alpha = 0.05}, 9999 at \code{alpha = 0.01}. Memory
+grows with the number of periods times units times \code{B}.}
 
 \item{seed}{Integer or \code{NULL}. Random seed for reproducibility.}
 
@@ -58,6 +61,9 @@ value avoids ties.}
 Default \code{0.05}. Where control of false discoveries is the priority and
 the analysis is at census tracts or an equally coarse scale
 (\code{lambda_min} above roughly 10 to 15), use \code{0.01}.}
+
+\item{sameness_tau}{Numeric in (0, 1). Significance level of the sameness
+test for the first against the last period. Default \code{0.05}.}
 
 \item{calculate_pvalues}{Logical. Compute bootstrap p-values. Default
 \code{TRUE}.}
@@ -171,6 +177,10 @@ fit and the sign of a significant quadratic term (quadratic only).}
 \item{\code{jenks_level}, \code{jenks_min}, \code{jenks_max}, \code{baseline_interval}}{Jenks
 class of the base-period count, its bounds and label.}
 }
+The comparison of the first and last periods is stored as
+\code{attr(x, "first_last")}: the robust S index, its sameness test and the
+degree of similarity \eqn{S_D} with the index of dissimilarity \eqn{D}
+(see \code{\link[=sppt]{sppt()}} and \code{\link[=sppt_similarity]{sppt_similarity()}}).
 The S indices, Jenks breaks, trend tables and p-value matrix are stored as
 attributes (for example \code{attr(x, "s_index_overlap")},
 \code{attr(x, "interval_table_linear")}, \code{attr(x, "pvalue_matrix")}). With
@@ -203,6 +213,15 @@ against the base with the bounded Monte Carlo bootstrap p-value
 period is significant at \code{alpha}; trends are fitted only for units with
 at least one significant period.
 }
+
+\strong{First against last period.} With p-values, the first and last
+periods are also compared as two patterns, as \code{\link[=sppt]{sppt()}} would: the robust
+S index over units not empty in both, its sameness test at
+\code{sameness_tau}, and the degree of similarity \eqn{S_D} with the index of
+dissimilarity \eqn{D} on the units flagged at \code{alpha} in the last period.
+This summarises how far the pattern moved over the whole series; the
+trends describe how it got there. The sameness test is not reported with
+\code{fix_base = TRUE}.
 
 Trends are ordinary least squares fits of each unit's share (or count)
 on time, linear or quadratic, tested at \code{trend_alpha}. Units are also

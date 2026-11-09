@@ -35,13 +35,85 @@
 #' Locations are never permuted, so the null is sampling variability around
 #' the observed intensity surface, not spatial randomness.
 #'
-#' **Multiple testing.** No correction is applied. Simulation evidence
-#' shows that corrections remove power at fine spatial scales without a
-#' meaningful benefit in false discovery rate, and that at coarse scales a
-#' stricter `alpha` achieves the same as a correction. The sameness and
-#' arrangement tests and [sppt_clusters()] address the global question
-#' instead. The raw p-values are returned, so a correction can still be
-#' applied with [stats::p.adjust()] if required.
+#' **Testing against a random distribution.** With `count_col = "BNER2021"`
+#' or `c("random", "BNER2021")`, the column is compared with a random
+#' allocation of its own total to the units. By default
+#' (`random_by = "exposure"`) each event is placed in a unit with probability
+#' in proportion to the unit's exposure: its area for polygons, its length
+#' for lines such as street segments. `random_by = "units"` gives every unit
+#' equal probability, and the name of a numeric column (population, say)
+#' uses that column as the exposure. The random distribution is
+#' known exactly, so the test is a Monte Carlo test against it: `B` random
+#' allocations give each unit's envelope of shares, and the p-value is the
+#' share of allocations that depart from the expected share by at least as
+#' much as the observed pattern does, \eqn{p = (1 + r)/(B + 1)}. Every unit
+#' with any exposure is eligible, including units with no events, which are
+#' informative here. Everything else is reported as usual: the S index and
+#' its sameness test (now: no more different than a random allocation),
+#' \eqn{S_D} and \eqn{D} (here \eqn{D} measures how concentrated the pattern
+#' is relative to its exposure, a Hoover-type index of concentration), the
+#' arrangement test, tiers and maps.
+#' The expected counts of the random pattern are added as column `random`.
+#' Confidence intervals and `fix_base` do not apply.
+#'
+#' **Sameness and degree of similarity.** The S index tests sameness: two
+#' realisations of one process give \eqn{S \approx 1 - \alpha}, and the
+#' sameness test asks whether S is lower than that. It does not measure how
+#' similar two patterns are. For that, `sppt()` also reports
+#' \deqn{S_D = 1 - \frac{1}{2}\sum_{i \in F} |p_{bi} - p_{ai}|,}{S_D = 1 -
+#' 1/2 * sum over flagged units of |p_bi - p_ai|,}
+#' where \eqn{p_{ai}} and \eqn{p_{bi}} are unit \eqn{i}'s shares of all
+#' events in the base and test patterns (as proportions) and \eqn{F} is the
+#' set of units flagged at `alpha`. Summed over all units, half the absolute
+#' difference in shares is the index of dissimilarity, \eqn{D} (Duncan and
+#' Duncan 1955), the share of either pattern that would have to move to other
+#' units to reproduce the other pattern (Hoover 1936). \eqn{S_D} limits that
+#' sum to the units the test flags. It lies in \[0, 1\], is symmetric in
+#' base and test, and is at least \eqn{1 - D}. Over the flagged units the
+#' shares where each pattern is higher need not balance, so \eqn{1 - S_D}
+#' approximates, and never exceeds, the share of either pattern that would
+#' have to move to remove the flagged differences: the larger of the two
+#' flagged totals. The report prints both totals and the events to move
+#' (that larger total times each pattern's total). Where power is limited, many
+#' genuine differences go unflagged and \eqn{S_D} overstates similarity; the
+#' share of \eqn{D} held by flagged units, \eqn{(1 - S_D)/D}, shows how much
+#' of the total dissimilarity the flags capture, and a note is printed when
+#' it is below 0.6, a judgement call rather than a calibrated threshold.
+#' \eqn{S_D} always uses the uncorrected flags, \eqn{p \le \alpha}. See
+#' [sppt_similarity()].
+#'
+#' **Multiple testing.** No correction is applied by default. Simulation
+#' evidence shows that corrections remove much of the power at fine spatial
+#' scales, and that at coarse scales a stricter `alpha` achieves much the same
+#' as a correction; the sameness and arrangement tests and [sppt_clusters()]
+#' address the global question instead. Where a list of units with
+#' controlled error is wanted, `correction` applies a method of
+#' [stats::p.adjust()]. `"BY"` (Benjamini and Yekutieli) controls the false
+#' discovery rate under any dependence between units, which the fixed totals
+#' of the two patterns create, so it is the safe choice; `"BH"` assumes
+#' independent or positively dependent tests. With a correction, `pvalue`
+#' holds the raw p-values, `pvalue_adj` the adjusted ones, units are flagged
+#' on the adjusted values, the S index counts those flags, and the sameness
+#' test is not reported, because the number of units flagged by chance is no
+#' longer binomial with rate `alpha`. The arrangement test and the tiers use
+#' the raw p-values for the evidence surface and the corrected flags for the
+#' tiers.
+#'
+#' **Number of replicates.** With `B = "auto"` (default) the number of
+#' replicates is the largest of three requirements, rounded up to a number
+#' ending in 999: a minimum of 4999; a Monte Carlo standard error of a
+#' p-value at `alpha` no more than 10% of `alpha`, which needs
+#' \eqn{B \ge 100(1 - \alpha)/\alpha}; and, under a correction, a smallest
+#' attainable p-value, \eqn{1/(B + 1)}, small enough for the most significant
+#' unit to survive it, \eqn{B + 1 \ge n/\alpha} for most methods and
+#' \eqn{B + 1 \ge n H_n/\alpha} for BY, where \eqn{n} is the number of
+#' eligible units and \eqn{H_n = 1 + 1/2 + \cdots + 1/n}. So `B = "auto"`
+#' gives 4999 at `alpha = 0.05` without a correction, 9999 at `alpha = 0.01`,
+#' and 129,999 for BY at `alpha = 0.05` across 824 units. Large numbers of
+#' replicates are computed in blocks, so memory does not grow with `B`; the
+#' result is the same as the single-matrix calculation. The confidence
+#' interval option needs the full matrices, so with `calculate_ci = TRUE`
+#' memory grows with \eqn{n \times B}.
 #'
 #' **Power.** `lambda_min`, the mean number of events per unit in the rarer
 #' pattern, governs power. Below 1.5 a low-power warning is issued and below
@@ -80,8 +152,14 @@
 #'   each spatial unit (for example `"DAUID"` or `"CTUID"`).
 #' @param count_col Character vector of length 2 giving the base and test
 #'   count columns, in that order (for example `c("BNER2003", "BNER2025")`).
-#' @param B Integer. Number of bootstrap replicates. Default `4999`; an odd
-#'   value avoids ties.
+#'   One element may be `"random"`, or a single column may be given alone,
+#'   to test that column against a random distribution of its events (see
+#'   Details); a single column is tested as `c("random", column)`, so that
+#'   positive differences mark units with more events than random.
+#' @param B `"auto"` (default) or an integer of at least 99: the number of
+#'   bootstrap replicates. `"auto"` chooses it from `alpha`, the number of
+#'   eligible units and `correction` (see Details). An integer is used as
+#'   given; an odd value avoids ties.
 #' @param seed Integer or `NULL`. Random seed for reproducibility.
 #' @param alpha Numeric in (0, 1). Significance level for flagging a unit.
 #'   Default `0.05`. Where control of false discoveries is the priority and
@@ -97,6 +175,9 @@
 #'   Requires polygon geometry. Default `TRUE`.
 #' @param nsim_moran Integer. Permutations for the global Moran's I test.
 #'   Default `999`.
+#' @param correction Character. Multiple testing correction, a method of
+#'   [stats::p.adjust()]: `"none"` (default), `"BY"`, `"BH"`, `"bonferroni"`,
+#'   `"holm"`, `"hochberg"` or `"hommel"`. See Details.
 #' @param calculate_ci Logical. Also compute marginal bootstrap confidence
 #'   intervals and the CI-based S index (Andresen 2009). Default `FALSE`.
 #' @param conf_level Numeric in (0, 1). Confidence level for the interval
@@ -109,6 +190,11 @@
 #'   and its observed proportions are treated as fixed. This gives an
 #'   asymmetric test, intended only for comparison against a known reference
 #'   distribution. Default `FALSE`.
+#' @param random_by How the random distribution spreads events when one
+#'   pattern is `"random"`. `"exposure"` (default): in proportion to each
+#'   unit's area for polygons or length for lines (street segments, say).
+#'   `"units"`: equal probability for every unit. Or the name of a
+#'   non-negative numeric column in `data` to use as the exposure.
 #' @param use_percentages Logical. Express proportions as percentages
 #'   (0-100) rather than as proportions (0-1). Default `TRUE`.
 #' @param verbose Logical. Print the test summary to the console. Default
@@ -143,7 +229,9 @@
 #'   \item{`low_power_warning`}{`TRUE` when `lambda_min < 1.5`.}
 #'   \item{`pvalue`}{Bootstrap p-value; `NA` for units empty in both
 #'     patterns.}
-#'   \item{`sig_pvalue`}{1 if `pvalue <= alpha`, otherwise 0.}
+#'   \item{`pvalue_adj`}{Adjusted p-value (only with a `correction`).}
+#'   \item{`sig_pvalue`}{1 if the unit is flagged at `alpha` (on the adjusted
+#'     p-value under a correction), otherwise 0.}
 #'   \item{`sig_pvalue_dir`}{1 = test > base, -1 = base > test, 0 = not
 #'     significant.}
 #'   \item{`signed_evidence`}{\eqn{\mathrm{sign}(d) \times -\log_{10}(p)}.}
@@ -157,7 +245,8 @@
 #'     not (CI only).}
 #'   \item{`sig_ci_dir`}{Direction of CI-based differences (CI only).}
 #' }
-#' The attribute `"sppt_summary"` holds the robust S index, the sameness and
+#' The attribute `"sppt_summary"` holds the robust S index, \eqn{S_D} and
+#' the dissimilarity index (element `similarity`), the sameness and
 #' arrangement tests, the tier counts and the settings; `summary()` prints
 #' it. The attribute `"sppt_maps"` holds the maps as a named list of
 #' `ggplot` objects (`difference`, `pvalue`, `tiers` with the arrangement
@@ -178,7 +267,15 @@
 #' test. *Annals of the American Association of Geographers*, in press.
 #' \doi{10.1080/24694452.2026.2733304}
 #'
-#' @seealso [sppt_longitudinal()], [sppt_sameness()], [sppt_clusters()],
+#' Duncan, O.D. and Duncan, B. (1955). A methodological analysis of
+#' segregation indexes. *American Sociological Review*, 20, 210-217.
+#' \doi{10.2307/2088328}
+#'
+#' Hoover, E.M. (1936). The measurement of industrial localization. *The
+#' Review of Economic Statistics*, 18, 162-171.
+#'
+#' @seealso [sppt_longitudinal()], [sppt_sameness()], [sppt_similarity()],
+#'   [sppt_clusters()],
 #'   [sppt_map()], [vancouver_ct]
 #' @examples
 #' res <- sppt(vancouver_ct, group_col = "id",
@@ -192,16 +289,18 @@
 sppt <- function(data,
                  group_col          = "group",
                  count_col,
-                 B                  = 4999L,
+                 B                  = "auto",
                  seed               = NULL,
                  alpha              = 0.05,
                  calculate_pvalues  = TRUE,
                  sameness_tau       = 0.05,
                  arrangement        = TRUE,
                  nsim_moran         = 999L,
+                 correction         = "none",
                  calculate_ci       = FALSE,
                  conf_level         = 0.85,
                  fix_base           = FALSE,
+                 random_by          = "exposure",
                  use_percentages    = TRUE,
                  verbose            = TRUE,
                  create_maps        = TRUE,
@@ -226,11 +325,30 @@ sppt <- function(data,
     stop("`group_col` '", group_col, "' does not uniquely identify rows.",
          call. = FALSE)
 
-  if (length(count_col) != 2L)
-    stop("`count_col` must be a character vector of length 2 (base, test).",
+  # One column, or one column and "random": test the column against a random
+  # allocation of its events to the units.
+  if (!is.character(count_col) || !length(count_col) %in% 1:2)
+    stop("`count_col` must be a character vector of length 2 (base, test), ",
+         "or a single column to test against a random distribution.",
          call. = FALSE)
+  if (length(count_col) == 1L) count_col <- c("random", count_col)
+  is_rand <- tolower(count_col) == "random" & !count_col %in% names(data)
+  if (all(is_rand))
+    stop("At most one element of `count_col` can be \"random\".", call. = FALSE)
+  random_mode <- any(is_rand)
+  if (random_mode) {
+    count_col[is_rand] <- "random"
+    if (fix_base)
+      stop("`fix_base` does not apply when one pattern is \"random\": the ",
+           "random distribution is already known.", call. = FALSE)
+    if (calculate_ci) {
+      warning("`calculate_ci` is not available against a random ",
+              "distribution; p-values are used.", call. = FALSE)
+      calculate_ci <- FALSE
+    }
+  }
 
-  for (col in count_col) {
+  for (col in count_col[!is_rand]) {
     if (!col %in% names(data))
       stop("`count_col` column '", col, "' not found in data.", call. = FALSE)
     vals <- data[[col]]
@@ -241,9 +359,17 @@ sppt <- function(data,
            call. = FALSE)
   }
 
-  if (!is.numeric(B) || length(B) != 1L || B < 99)
-    stop("`B` must be a single integer >= 99.", call. = FALSE)
-  B <- as.integer(B)
+  B_auto <- is.character(B) && length(B) == 1L && identical(tolower(B), "auto")
+  if (!B_auto && (!is.numeric(B) || length(B) != 1L || is.na(B) || B < 99))
+    stop("`B` must be \"auto\" or a single integer >= 99.", call. = FALSE)
+  if (!B_auto) B <- as.integer(B)
+
+  valid_corrections <- c("none", "BY", "BH", "bonferroni", "holm",
+                         "hochberg", "hommel")
+  if (!is.character(correction) || length(correction) != 1L ||
+      !correction %in% valid_corrections)
+    stop("`correction` must be one of: ",
+         paste(valid_corrections, collapse = ", "), ".", call. = FALSE)
 
   if (!is.numeric(alpha) || length(alpha) != 1L || alpha <= 0 || alpha >= 1)
     stop("`alpha` must be a single numeric value in (0, 1).", call. = FALSE)
@@ -289,13 +415,52 @@ sppt <- function(data,
   test_name <- count_col[2L]
   n_units   <- nrow(data)
 
-  counts_a <- as.integer(data[[base_name]])
-  counts_b <- as.integer(data[[test_name]])
-  counts_a[is.na(counts_a)] <- 0L
-  counts_b[is.na(counts_b)] <- 0L
+  read_counts <- function(nm) {
+    x <- as.integer(data[[nm]])
+    x[is.na(x)] <- 0L
+    x
+  }
+  if (random_mode) {
+    # The random pattern holds the observed total, spread over the units in
+    # proportion to their exposure (area, length, a column, or equal). Its
+    # "counts" are the expected counts, which need not be whole numbers.
+    obs_name   <- count_col[!is_rand]
+    counts_obs <- read_counts(obs_name)
+    expo       <- exposure_weights(data, random_by)
+    w          <- expo$w
+    p_ref        <- w / sum(w)
+    counts_rand  <- sum(counts_obs) * p_ref
+    counts_a <- if (is_rand[1L]) counts_rand else counts_obs
+    counts_b <- if (is_rand[2L]) counts_rand else counts_obs
+  } else {
+    counts_a <- read_counts(base_name)
+    counts_b <- read_counts(test_name)
+  }
 
-  N_a <- sum(counts_a)
-  N_b <- sum(counts_b)
+  N_a <- if (random_mode && is_rand[1L]) sum(counts_obs) else sum(counts_a)
+  N_b <- if (random_mode && is_rand[2L]) sum(counts_obs) else sum(counts_b)
+
+  # Units empty in both patterns are excluded from inference, and from the
+  # number of tests that sets B under a correction.
+  zero_mask  <- counts_a == 0L & counts_b == 0L
+  n_zero     <- sum(zero_mask)
+  n_eligible <- n_units - n_zero
+
+  B_info <- choose_B(alpha, n_eligible, correction)
+  if (B_auto) {
+    B <- B_info$B
+  } else if (calculate_pvalues && correction != "none" && B < B_info$B_correction) {
+    warning(sprintf(paste0(
+      "With correction = \"%s\" and %d eligible units, no unit can be ",
+      "flagged unless B >= %d: the smallest attainable p-value, 1/(B + 1), ",
+      "is too large to survive the correction. Use B = \"auto\"."),
+      correction, n_eligible, B_info$B_correction), call. = FALSE)
+  }
+  B_note <- if (!B_auto) "set by user" else if (B_info$binding == "correction")
+    sprintf("auto: lets %s flag a unit among %d", correction, n_eligible)
+  else if (B_info$binding == "alpha")
+    sprintf("auto: Monte Carlo SE of p at alpha = %.2g", sqrt(alpha * (1 - alpha) / B))
+  else "auto: default minimum"
 
   # -- 3. lambda_min and decision tier ----------------------------------------
   lambda_min <- min(N_a, N_b) / n_units
@@ -337,13 +502,19 @@ sppt <- function(data,
   # Lines are wrapped to fit 70 columns; see field_lines().
   say("\n", rule_line("="), "Spatial Point Pattern Test\n", rule_line("="),
       sep = "")
-  say(field_lines("Base", sprintf("%s (N = %d)", base_name, N_a)))
-  say(field_lines("Test", sprintf("%s (N = %d)", test_name, N_b)))
+  rand_label <- function(N) sprintf(
+    "random (N = %d, %s)", as.integer(round(N)), expo$label)
+  say(field_lines("Base", if (random_mode && is_rand[1L]) rand_label(N_a)
+                  else sprintf("%s (N = %d)", base_name, N_a)))
+  say(field_lines("Test", if (random_mode && is_rand[2L]) rand_label(N_b)
+                  else sprintf("%s (N = %d)", test_name, N_b)))
   say(field_lines("Units", n_units))
   say(field_lines("lambda_min", sprintf("%.3f", lambda_min)))
-  say(field_lines("Bootstrap B", B))
+  say(field_lines("Bootstrap B", sprintf("%d (%s)", B, B_note)))
   if (calculate_pvalues)
     say(field_lines("alpha", sprintf("%.3f", alpha)))
+  if (calculate_pvalues && correction != "none")
+    say(field_lines("Correction", correction))
   if (calculate_ci)
     say(field_lines("CI level", sprintf("%.1f%% (marginal overlap)",
                                         conf_level * 100)))
@@ -357,54 +528,86 @@ sppt <- function(data,
   prop_b <- if (N_b > 0) counts_b / N_b * scale_factor else rep(0, n_units)
   obs_diff <- prop_b - prop_a   # test minus base
 
-  # Units empty in both patterns are excluded from inference
-  zero_mask <- counts_a == 0L & counts_b == 0L
-  n_zero    <- sum(zero_mask)
-
   # -- 6. Shared bootstrap ----------------------------------------------------
   # One multinomial draw per variable, B replicates, shared by CI and PV.
   # Drawing counts from the multinomial of observed shares is the closed form
   # of resampling events at their observed locations and re-aggregating.
-  if (N_a == 0L || N_b == 0L) {
+  # When the n x B matrices would be large and no intervals are needed, the
+  # p-values are computed in blocks of replicates instead (blocked_counts()),
+  # which gives the same result without holding the matrices in memory.
+  valid_bootstrap <- N_a > 0L && N_b > 0L
+  if (!valid_bootstrap)
     warning("One or both count columns sum to zero. No inference possible.",
             call. = FALSE)
-    boot_a <- boot_b <- boot_diffs_c <- matrix(0, nrow = n_units, ncol = B)
-    valid_bootstrap <- FALSE
-  } else {
+  active   <- !zero_mask
+  max_cells <- getOption("sppt.max_cells", 2.5e7)
+  blocked  <- valid_bootstrap && !calculate_ci &&
+    as.numeric(n_units) * B > max_cells
+  r_count  <- NULL
+
+  if (valid_bootstrap && random_mode) {
+    # Monte Carlo test against the random distribution. That distribution is
+    # known, so only the random allocations vary: B allocations of the
+    # observed total, and each unit's observed share compared with the
+    # envelope of its shares across them. Resampling the observed pattern as
+    # well would count its sampling variation twice.
+    if (calculate_pvalues)
+      r_count <- random_counts(sum(counts_obs), p_ref, B, scale_factor,
+                               counts_obs, active)
+  } else if (valid_bootstrap) {
     p_a <- counts_a / N_a
     p_b <- counts_b / N_b
-
-    boot_a <- if (fix_base) {
-      matrix(rep(p_a * scale_factor, B), nrow = n_units, ncol = B)
+    if (blocked) {
+      if (calculate_pvalues) {
+        say(field_lines("Note", sprintf(
+          "computing p-values in blocks (%d units x %d replicates)",
+          n_units, B)))
+        r_count <- blocked_counts(N_a, N_b, p_a, p_b, B, fix_base,
+                                  scale_factor, obs_diff, active)
+      }
     } else {
-      matrix(stats::rmultinom(B, size = N_a, prob = p_a),
-             nrow = n_units) / N_a * scale_factor
-    }
-    boot_b <- matrix(stats::rmultinom(B, size = N_b, prob = p_b),
-                     nrow = n_units) / N_b * scale_factor
+      boot_a <- if (fix_base) {
+        matrix(rep(p_a * scale_factor, B), nrow = n_units, ncol = B)
+      } else {
+        matrix(stats::rmultinom(B, size = N_a, prob = p_a),
+               nrow = n_units) / N_a * scale_factor
+      }
+      boot_b <- matrix(stats::rmultinom(B, size = N_b, prob = p_b),
+                       nrow = n_units) / N_b * scale_factor
 
-    # Centred difference distribution for p-values
-    boot_diffs   <- boot_b - boot_a
-    boot_diffs_c <- boot_diffs - rowMeans(boot_diffs)
-    valid_bootstrap <- TRUE
+      # Centred difference distribution for p-values
+      boot_diffs_c <- boot_b - boot_a
+      boot_diffs_c <- boot_diffs_c - rowMeans(boot_diffs_c)
+      if (calculate_pvalues)
+        r_count <- rowSums(abs(boot_diffs_c[active, , drop = FALSE]) >=
+                             abs(obs_diff[active]))
+      rm(boot_diffs_c)
+      if (!calculate_ci) rm(boot_a, boot_b)
+    }
   }
 
   # -- 7. Bootstrap p-values --------------------------------------------------
   pvalue     <- rep(NA_real_, n_units)
+  pvalue_adj <- rep(NA_real_, n_units)
   sig_pvalue <- rep(NA_integer_, n_units)
   sig_pv_dir <- rep(NA_integer_, n_units)
 
   if (calculate_pvalues && valid_bootstrap) {
-    active <- !zero_mask
     # Bounded Monte Carlo p-value: p = (1 + r) / (B + 1), where r counts the
     # centred bootstrap differences at least as large in absolute value as
     # the observed difference. The unbounded form r / B admits p = 0, which
     # is anti-conservative and unbounded on the -log10 scale.
-    pvalue[active] <- (1 + rowSums(
-      abs(boot_diffs_c[active, , drop = FALSE]) >= abs(obs_diff[active])
-    )) / (B + 1)
+    pvalue[active] <- (1 + r_count) / (B + 1)
 
-    sig_pvalue[active] <- as.integer(pvalue[active] <= alpha)
+    # Under a correction units are flagged on the adjusted p-values; the raw
+    # p-values are kept for the evidence surface and for reporting.
+    p_flag <- pvalue
+    if (correction != "none") {
+      pvalue_adj[active] <- stats::p.adjust(pvalue[active],
+                                            method = correction)
+      p_flag <- pvalue_adj
+    }
+    sig_pvalue[active] <- as.integer(p_flag[active] <= alpha)
     sig_pv_dir[active] <- ifelse(sig_pvalue[active] == 1L,
                                  as.integer(sign(obs_diff[active])), 0L)
   }
@@ -440,7 +643,6 @@ sppt <- function(data,
   # -- 9. Robust S index and sameness test ------------------------------------
   # The denominator excludes zero-zero units, so the robust index equals the
   # plain index whenever every unit contains at least one event.
-  n_eligible <- n_units - n_zero
 
   s_index_pv <- NA_real_
   n_sig_pv   <- NA_integer_
@@ -448,9 +650,11 @@ sppt <- function(data,
   if (calculate_pvalues && valid_bootstrap && n_eligible > 0L) {
     n_sig_pv   <- sum(sig_pvalue[!zero_mask] == 1L, na.rm = TRUE)
     s_index_pv <- 1 - n_sig_pv / n_eligible
-    # Only calibrated under the symmetric bootstrap: fix_base = TRUE breaks
-    # the null flagging rate at sparse units.
-    if (!fix_base)
+    # Only calibrated for uncorrected p-values under the symmetric bootstrap:
+    # a correction moves the null flagging rate away from alpha (under
+    # sameness it flags no unit at all in most samples), and fix_base = TRUE
+    # breaks it at sparse units.
+    if (correction == "none" && !fix_base)
       sameness <- sppt_sameness(s_index_pv, n_sig_pv, n_eligible, alpha,
                                 tau = sameness_tau)
   }
@@ -463,6 +667,12 @@ sppt <- function(data,
     n_sig_ci   <- sum(intervals_overlap[!zero_mask] == 0L, na.rm = TRUE)
     s_index_ci <- 1 - n_sig_ci / n_eligible
   }
+
+  # Degree of similarity, S_D, on the uncorrected flags (see Details)
+  similarity <- NULL
+  if (calculate_pvalues && valid_bootstrap && n_eligible > 0L)
+    similarity <- similarity_d(counts_a, counts_b,
+                               active & pvalue <= alpha)
 
   # -- 10. Spatial arrangement and confidence tiers ---------------------------
   # Under sameness the per-unit p-values are uniform, so the signed surface
@@ -503,6 +713,7 @@ sppt <- function(data,
 
   # -- 11. Append result columns ----------------------------------------------
   result <- data
+  if (random_mode) result[["random"]] <- round(counts_rand, 6)
   result$base_prop         <- round(prop_a, 6)
   result$test_prop         <- round(prop_b, 6)
   result$difference        <- round(obs_diff, 6)
@@ -511,6 +722,7 @@ sppt <- function(data,
 
   if (calculate_pvalues) {
     result$pvalue          <- round(pvalue, 6)
+    if (correction != "none") result$pvalue_adj <- round(pvalue_adj, 6)
     result$sig_pvalue      <- sig_pvalue
     result$sig_pvalue_dir  <- sig_pv_dir
     result$signed_evidence <- round(
@@ -542,18 +754,27 @@ sppt <- function(data,
                                 sum(sig_pv_dir[!zero_mask] == -1L, na.rm = TRUE),
                                 base_name, test_name)))
   }
+  if (!is.null(similarity))
+    say(similarity_lines(similarity, base_name, test_name, correction))
 
   if (!is.null(sameness) && !is.na(sameness$p_value)) {
     say(field_lines("Sameness", sprintf(
       "p %s (%s); S >= %.4f needed at tau = %.2f; %s",
       fmt_p(sameness$p_value), sameness$method, sameness$threshold,
       sameness$tau,
-      if (isTRUE(sameness$same))
+      if (random_mode) {
+        if (isTRUE(sameness$same)) "no more different than a random allocation"
+        else "more different than a random allocation"
+      } else if (isTRUE(sameness$same))
         "no more different than two realisations of one process"
       else "more different than two realisations of one process")))
     if (n_eligible < n_units * 0.75)
       say(field_lines("", paste("Many units are empty in both patterns;",
                                 "the sameness test is conservative here.")))
+  } else if (calculate_pvalues && !is.na(s_index_pv) && correction != "none") {
+    say(field_lines("Sameness", paste(
+      "not reported: under a correction the number of units flagged by",
+      "chance is no longer binomial with rate alpha")))
   } else if (calculate_pvalues && !is.na(s_index_pv) && fix_base) {
     say(field_lines("Sameness", "not reported (not calibrated for fix_base = TRUE)"))
   }
@@ -599,6 +820,8 @@ sppt <- function(data,
   # -- 13. Summary attribute and class ----------------------------------------
   attr(result, "sppt_summary") <- list(
     base_name        = base_name,
+    random           = if (random_mode) list(side = if (is_rand[1L]) "base"
+                                             else "test", by = expo$by),
     test_name        = test_name,
     n_units          = n_units,
     n_eligible       = n_eligible,
@@ -606,7 +829,10 @@ sppt <- function(data,
     lambda_min       = lambda_min,
     B                = B,
     alpha            = if (calculate_pvalues) alpha else NULL,
+    correction       = correction,
+    B_note           = B_note,
     s_index_pv       = s_index_pv,
+    similarity       = similarity,
     n_sig_pv         = n_sig_pv,
     sameness         = sameness,
     arrangement      = if (is.null(arrange_res)) NULL else
@@ -664,6 +890,153 @@ sppt <- function(data,
 }
 
 # -- Internal helpers ---------------------------------------------------------
+
+# Number of bootstrap replicates for B = "auto". Three requirements, the
+# largest wins, rounded up to a number ending in 999:
+#   * a minimum of 4999;
+#   * Monte Carlo standard error of a p-value at alpha no more than 10% of
+#     alpha, sqrt(alpha (1 - alpha) / B) <= 0.1 alpha, so
+#     B >= 100 (1 - alpha) / alpha;
+#   * under a correction, the smallest attainable p-value, 1 / (B + 1), small
+#     enough for the most significant of n tests to survive it:
+#     1 / (B + 1) <= alpha / n, or alpha / (n H_n) for BY, where
+#     H_n = 1 + 1/2 + ... + 1/n.
+choose_B <- function(alpha, n_tests, correction = "none") {
+  round_up <- function(x) {
+    k <- max(3, floor(log10(x)) - 1)
+    as.integer(ceiling((x + 1) / 10^k) * 10^k - 1)
+  }
+  n_tests <- max(n_tests, 1L)
+  need <- c(minimum = 4999,
+            alpha = 100 * (1 - alpha) / alpha,
+            correction = if (correction == "none") 0 else
+              n_tests * (if (correction == "BY")
+                sum(1 / seq_len(n_tests)) else 1) / alpha)
+  list(B = round_up(max(need)),
+       binding = names(need)[which.max(need)],
+       B_correction = if (correction == "none") 0L else
+         round_up(need[["correction"]]))
+}
+
+# Exceedance counts for the Monte Carlo test against a random distribution:
+# B allocations of N events with probabilities p_ref, in blocks. The observed
+# and simulated deviations are computed with the same arithmetic so that
+# equal counts compare as equal.
+# Exposure for the random distribution: unit area for polygons, length for
+# lines, equal weights, or a user-supplied column. Returns the weights, a
+# console label and the resolved choice.
+exposure_weights <- function(data, random_by) {
+  if (!is.character(random_by) || length(random_by) != 1L || is.na(random_by))
+    stop("`random_by` must be \"exposure\", \"units\" or the name of a ",
+         "column in `data`.", call. = FALSE)
+  n <- nrow(data)
+  if (random_by == "units")
+    return(list(w = rep(1, n), label = "equal probability per unit",
+                by = "units"))
+  if (random_by == "exposure") {
+    gt <- unique(as.character(sf::st_geometry_type(data, by_geometry = TRUE)))
+    poly <- c("POLYGON", "MULTIPOLYGON")
+    line <- c("LINESTRING", "MULTILINESTRING")
+    if (all(gt %in% poly)) {
+      w <- as.numeric(sf::st_area(data)); what <- "area"
+    } else if (all(gt %in% line)) {
+      w <- as.numeric(sf::st_length(data)); what <- "length"
+    } else {
+      stop("`random_by = \"exposure\"` needs all polygons (area) or all ",
+           "lines (length); this layer has ", paste(gt, collapse = ", "),
+           ". Use `random_by = \"units\"` or name an exposure column.",
+           call. = FALSE)
+    }
+    label <- paste("probability in proportion to", what)
+  } else {
+    if (!random_by %in% names(data))
+      stop("`random_by` must be \"exposure\", \"units\" or the name of a ",
+           "column in `data`; no column \"", random_by, "\".", call. = FALSE)
+    w <- sf::st_drop_geometry(data)[[random_by]]
+    if (!is.numeric(w))
+      stop("Exposure column `", random_by, "` must be numeric.", call. = FALSE)
+    what  <- random_by
+    label <- paste0("probability in proportion to `", random_by, "`")
+  }
+  if (any(!is.finite(w)) || any(w < 0) || sum(w) <= 0)
+    stop("The exposure (", what, ") must be finite and non-negative, with ",
+         "a positive total.", call. = FALSE)
+  if (any(w == 0))
+    warning(sum(w == 0), " unit(s) have zero exposure (", what, "); a random ",
+            "allocation never places events there.", call. = FALSE)
+  list(w = w, label = label, by = what)
+}
+
+random_counts <- function(N, p_ref, B, scale_factor, counts_obs, active) {
+  n <- length(p_ref)
+  block <- max(1L, as.integer(getOption("sppt.block_cells", 5e6) %/% n))
+  sizes <- diff(unique(c(seq.int(0L, B, by = block), B)))
+  act <- which(active)
+  ref <- p_ref[act] * scale_factor
+  obs <- abs(counts_obs[act] / N * scale_factor - ref)
+  r <- numeric(length(act))
+  for (m in sizes) {
+    x <- stats::rmultinom(m, N, p_ref)[act, , drop = FALSE] / N * scale_factor
+    r <- r + rowSums(abs(x - ref) >= obs)
+  }
+  r
+}
+
+# P-value exceedance counts computed in blocks of replicates. Two passes over
+# the same random numbers: the first finds each unit's mean bootstrap
+# difference (the centre), the second counts centred differences at least as
+# large as the observed one. The base and test streams are kept apart by
+# saving and restoring the generator state, so the replicates, and hence the
+# counts, are those of the single-matrix calculation, up to floating-point
+# rounding of the centre. The generator is left where that calculation would
+# leave it.
+blocked_counts <- function(N_a, N_b, p_a, p_b, B, fix_base, scale_factor,
+                           obs_diff, active) {
+  n <- length(p_a)
+  block <- max(1L, as.integer(getOption("sppt.block_cells", 5e6) %/% n))
+  sizes <- diff(unique(c(seq.int(0L, B, by = block), B)))
+  if (!exists(".Random.seed", envir = globalenv(), inherits = FALSE))
+    stats::runif(1L)
+  get_seed <- function() get(".Random.seed", envir = globalenv(),
+                             inherits = FALSE)
+  put_seed <- function(x) assign(".Random.seed", x, envir = globalenv())
+
+  # Pass 1: row sums of the counts, base stream then test stream
+  s0 <- get_seed()
+  sum_a <- numeric(n)
+  if (!fix_base)
+    for (m in sizes) sum_a <- sum_a + rowSums(stats::rmultinom(m, N_a, p_a))
+  s1 <- get_seed()
+  sum_b <- numeric(n)
+  for (m in sizes) sum_b <- sum_b + rowSums(stats::rmultinom(m, N_b, p_b))
+  s2 <- get_seed()
+  mean_a <- if (fix_base) p_a * scale_factor else sum_a / B / N_a * scale_factor
+  centre <- sum_b / B / N_b * scale_factor - mean_a
+
+  # Pass 2: the same draws again, paired block by block
+  act <- which(active)
+  obs <- abs(obs_diff[act])
+  r <- numeric(length(act))
+  sa <- s0
+  sb <- s1
+  for (m in sizes) {
+    if (fix_base) {
+      a <- p_a[act] * scale_factor
+    } else {
+      put_seed(sa)
+      a <- stats::rmultinom(m, N_a, p_a)[act, , drop = FALSE] / N_a *
+        scale_factor
+      sa <- get_seed()
+    }
+    put_seed(sb)
+    b <- stats::rmultinom(m, N_b, p_b)[act, , drop = FALSE] / N_b *
+      scale_factor
+    sb <- get_seed()
+    r <- r + rowSums(abs(b - a - centre[act]) >= obs)
+  }
+  put_seed(s2)
+  r
+}
 
 fmt_p <- function(p) if (p < 0.0001) "< 0.0001" else sprintf("= %.4f", p)
 
@@ -786,10 +1159,16 @@ summary.sppt_result <- function(object, ...) {
   cat(field_lines("Units", sprintf("%d (%d eligible, %d empty in both)",
                                    s$n_units, s$n_eligible, s$n_zero)))
   cat(field_lines("lambda_min", sprintf("%.3f", s$lambda_min)))
-  cat(field_lines("Bootstrap B", s$B))
+  cat(field_lines("Bootstrap B", if (is.null(s$B_note)) s$B else
+    sprintf("%d (%s)", s$B, s$B_note)))
+  if (!is.null(s$correction) && s$correction != "none")
+    cat(field_lines("Correction", s$correction))
   if (!is.null(s$alpha) && !is.na(s$s_index_pv))
     cat(field_lines("Robust S", sprintf("%.4f (alpha = %.3f; %d differ)",
                                         s$s_index_pv, s$alpha, s$n_sig_pv)))
+  if (!is.null(s$similarity))
+    cat(similarity_lines(s$similarity, s$base_name, s$test_name,
+                         if (is.null(s$correction)) "none" else s$correction))
   if (!is.null(s$sameness) && !is.na(s$sameness$p_value))
     cat(field_lines("Sameness", sprintf(
       "p %s (%s); S >= %.4f needed at tau = %.2f [%s]",

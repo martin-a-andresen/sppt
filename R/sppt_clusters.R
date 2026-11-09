@@ -51,6 +51,10 @@
 #' level `level`. A map with no cluster above its ceiling is not evidence of
 #' no difference: power may be too low.
 #'
+#' **Corrections.** Under a multiple testing correction fewer units are
+#' flagged by chance than `alpha` implies, so the ceiling, simulated at rate
+#' `alpha`, is conservative and a warning is issued.
+#'
 #' **Reference values.** For Vancouver, `alpha = 0.05`, the one-gap rule
 #' and undirected clusters (`direction = FALSE`), the published
 #' single-cluster ceilings are about
@@ -126,6 +130,10 @@ sppt_clusters <- function(result, rule = c("one_gap", "contiguous"),
 
   s <- attr(result, "sppt_summary")
   alpha <- s$alpha
+  if (!is.null(s$correction) && s$correction != "none")
+    warning("Units were flagged under a multiple testing correction, so ",
+            "their null flagging rate is below alpha and the ceiling, ",
+            "simulated at rate alpha, is conservative.", call. = FALSE)
 
   dir_obs  <- result$sig_pvalue_dir
   eligible <- !is.na(dir_obs)

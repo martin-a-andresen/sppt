@@ -111,6 +111,10 @@ them to hold, as the published guidance does, is a union of rules each at
 level \code{level}. A map with no cluster above its ceiling is not evidence of
 no difference: power may be too low.
 
+\strong{Corrections.} Under a multiple testing correction fewer units are
+flagged by chance than \code{alpha} implies, so the ceiling, simulated at rate
+\code{alpha}, is conservative and a warning is issued.
+
 \strong{Reference values.} For Vancouver, \code{alpha = 0.05}, the one-gap rule
 and undirected clusters (\code{direction = FALSE}), the published
 single-cluster ceilings are about

@@ -51,6 +51,9 @@ The console report gives:
   share of events did not change significantly;
 * the **sameness test**, which asks whether that S index is lower than two
   realisations of one process would give;
+* **S_D**, the degree of similarity: the share of each pattern already in
+  place once only the flagged units are allowed to differ, with the index of
+  dissimilarity D and the number of events that would have to move;
 * the **arrangement test**, Moran's I on the signed evidence surface, which
   asks whether the differences cluster in space;
 * the **confidence tiers** of the flagged units (core, edge, outside);
@@ -73,7 +76,45 @@ table(res$sig_pvalue_dir, useNA = "ifany")
 
 The p-value is the bounded Monte Carlo form $p = (1 + r)/(B + 1)$, so it is
 never exactly zero; with `B = 999` the smallest possible value is 0.001.
-`B = 4999` (the default) is recommended for final analyses.
+The default, `B = "auto"`, uses 4999 replicates at `alpha = 0.05`, more at
+smaller `alpha` or under a correction.
+
+## Sameness and degree of similarity
+
+S tests sameness: is S lower than the 1 - alpha that two realisations of one
+process give? It does not say how far apart two different patterns are. S_D
+does, in events: `sppt_similarity()` returns it with the index of
+dissimilarity D.
+
+```{r similarity}
+sppt_similarity(res)
+```
+
+Where power is limited many real differences are not flagged and S_D
+overstates similarity, so `share_d_flagged` reports how much of D the flagged
+units hold. Over the flagged units the shares where each pattern is higher
+need not balance, so `share_to_move`, the larger of `flagged_test_higher` and
+`flagged_base_higher`, is the exact share that would have to move; 1 - S_D
+approximates it from below.
+
+## Testing against a random distribution
+
+Give a single column, or a column and `"random"`, to ask how far one pattern
+is from random and where it differs. The random distribution spreads the
+column's own total over the units in proportion to their exposure: area for
+polygons, length for lines such as street segments. `random_by = "units"`
+gives every unit equal probability, and naming a column (population, say)
+uses it as the exposure.
+
+```{r random}
+res_r <- sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
+              B = 999, seed = 42, verbose = FALSE, create_maps = FALSE)
+sppt_similarity(res_r)
+```
+
+Positive differences mark tracts with more residential burglary than a random
+allocation in proportion to area would give. Here D measures how concentrated
+burglary is relative to land area, a Hoover-type index of concentration.
 
 ## Reading the map at fine scales
 
@@ -153,13 +194,14 @@ res <- sppt(
   data               = vancouver_ct,
   group_col          = "id",
   count_col          = c("BNER2003", "BNER2025"), # base, then test
-  B                  = 4999,    # bootstrap replicates; odd avoids ties
+  B                  = "auto",  # replicates, chosen from alpha and correction
   seed               = NULL,    # set for reproducible results
   alpha              = 0.05,    # unit-level significance level
   calculate_pvalues  = TRUE,    # bootstrap p-values
   sameness_tau       = 0.05,    # significance level of the sameness test
   arrangement        = TRUE,    # Moran's I on the signed evidence surface
   nsim_moran         = 999,     # permutations for global Moran's I
+  correction         = "none",  # or "BY", "BH", "bonferroni", ...
   calculate_ci       = FALSE,   # also compute marginal CI overlap (2009)
   conf_level         = 0.85,    # CI level; about alpha = 0.05
   fix_base           = FALSE,   # TRUE = do not bootstrap the base pattern
@@ -187,10 +229,16 @@ standard errors, which corresponds to a two-sample test at about
 
 ### Multiple testing corrections
 
-`sppt()` applies none. At fine scales corrections remove nearly all power,
-and at coarse scales a stricter `alpha` does the same job. The raw p-values
-are returned, so `p.adjust()` can be applied to `res$pvalue` if a reviewer
-insists, but the sameness test is then no longer calibrated.
+None is applied by default. At fine scales corrections remove most of the
+power, and at coarse scales a stricter `alpha` does much the same job. Where
+a list of units with controlled error is wanted, `correction = "BY"` controls
+the false discovery rate under any dependence between units. Raw p-values
+stay in `pvalue`, adjusted ones go in `pvalue_adj`, and the sameness test is
+not reported, because chance flags are no longer binomial with rate `alpha`.
+
+A correction needs many replicates: the smallest attainable p-value,
+1/(B + 1), must survive it. `B = "auto"` takes care of this, and computes
+large numbers of replicates in blocks so that memory stays modest.
 
 ### Fixed base
 

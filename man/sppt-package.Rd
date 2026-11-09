@@ -15,6 +15,8 @@ confidence interval overlap.
 \item \code{\link[=sppt_longitudinal]{sppt_longitudinal()}} compares every period of a time series against the
 first period and classifies unit-level trajectories.
 \item \code{\link[=sppt_sameness]{sppt_sameness()}} tests a robust S index against sameness.
+\item \code{\link[=sppt_similarity]{sppt_similarity()}} gives the degree of similarity, S_D, and the index
+of dissimilarity.
 \item \code{\link[=sppt_map]{sppt_map()}} redraws the maps from either analysis with a chosen layout.
 }
 }
