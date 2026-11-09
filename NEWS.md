@@ -27,8 +27,11 @@
 * `sppt()` reports a degree of similarity, S_D: one minus half the sum of
   absolute differences in shares over the flagged units, alongside the index
   of dissimilarity D (Duncan and Duncan 1955), the share of D held by
-  flagged units and the number of events of each pattern that would have to
-  move. A note is printed when flagged units hold less than 60% of D. S tests
+  flagged units, the flagged share differences in each direction, and the
+  share and number of events of each pattern that would have to move to
+  remove the flagged differences (the larger of the two directions, which
+  1 - S_D approximates from below). A note is printed when flagged units
+  hold less than 60% of D. S tests
   sameness; S_D measures how similar two patterns are. New
   `sppt_similarity()` returns these values from a result.
 * `sppt()` tests a single pattern against a random distribution:

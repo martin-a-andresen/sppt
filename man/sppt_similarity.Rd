@@ -13,14 +13,17 @@ sppt_similarity(result)
 A one-row data frame with columns \code{s_index} (robust S),
 \code{s_index_d} (\eqn{S_D}), \code{dissimilarity_d} (\eqn{D}), \code{share_d_flagged},
 \code{n_flagged} (units flagged without a correction), \code{n_eligible},
-\code{events_to_move_base} and \code{events_to_move_test}
-(\eqn{(1 - S_D)} times each pattern's total).
+\code{flagged_test_higher} (\eqn{H_b}), \code{flagged_base_higher}
+(\eqn{H_a}), \code{share_to_move} (\eqn{\max(H_a, H_b)}), and
+\code{events_to_move_base} and \code{events_to_move_test} (\code{share_to_move} times
+each pattern's total).
 }
 \description{
 Returns the degree-of-similarity measures of a \code{\link[=sppt]{sppt()}} result: the S
 index, \eqn{S_D}, the index of dissimilarity \eqn{D}, the share of
-\eqn{D} held by flagged units, and the number of events of each pattern
-that would have to move.
+\eqn{D} held by flagged units, the flagged share differences in each
+direction, and the share and number of events of each pattern that would
+have to move to remove the differences at the flagged units.
 }
 \details{
 With \eqn{p_{ai}} and \eqn{p_{bi}} each unit's share of all events in the
@@ -35,9 +38,20 @@ testing correction (units empty in both patterns are never flagged).
 \eqn{D} is the index of dissimilarity (Duncan and Duncan 1955): the share
 of either pattern that would have to move to other units for the two to
 match, the redistribution reading of Hoover (1936). \eqn{S_D} counts only
-the redistribution at flagged units, so it is the share of each pattern
-already in place once only significant differences count. It lies in
-[0, 1], is symmetric in base and test, and is at least \eqn{1 - D}.
+the flagged units. It lies in [0, 1], is symmetric in base and test,
+and is at least \eqn{1 - D}.
+
+Over all units the shares where the test pattern is higher and where the
+base pattern is higher balance, so \eqn{D} is exactly the share to move.
+Over the flagged units alone they need not balance. Write \eqn{H_b} for
+the sum of \eqn{p_{bi} - p_{ai}} over flagged units where the test
+pattern is higher and \eqn{H_a} for the sum of \eqn{p_{ai} - p_{bi}}
+where the base pattern is higher. Removing the differences at the flagged
+units moves \eqn{\max(H_a, H_b)} of either pattern, the excess going to
+or coming from unflagged units, while \eqn{1 - S_D = (H_a + H_b)/2}. So
+\eqn{1 - S_D} approximates, and never exceeds, the share to move; the two
+are equal when \eqn{H_a = H_b}, as when every unit is flagged.
+\code{share_to_move} and the events to move use \eqn{\max(H_a, H_b)}.
 
 The two indices answer different questions. S tests sameness: it is
 compared with \eqn{1 - \alpha}, what two realisations of one process give,

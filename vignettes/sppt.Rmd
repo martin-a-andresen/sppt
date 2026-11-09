@@ -92,7 +92,10 @@ sppt_similarity(res)
 
 Where power is limited many real differences are not flagged and S_D
 overstates similarity, so `share_d_flagged` reports how much of D the flagged
-units hold.
+units hold. Over the flagged units the shares where each pattern is higher
+need not balance, so `share_to_move`, the larger of `flagged_test_higher` and
+`flagged_base_higher`, is the exact share that would have to move; 1 - S_D
+approximates it from below.
 
 ## Testing against a random distribution
 

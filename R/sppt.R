@@ -68,11 +68,13 @@
 #' difference in shares is the index of dissimilarity, \eqn{D} (Duncan and
 #' Duncan 1955), the share of either pattern that would have to move to other
 #' units to reproduce the other pattern (Hoover 1936). \eqn{S_D} limits that
-#' redistribution to the units the test flags, so it is the share of each
-#' pattern already in place once only significant differences count. It lies
-#' in \[0, 1\], is symmetric in base and test, and is at least
-#' \eqn{1 - D}. Multiplied by each pattern's total, \eqn{1 - S_D} gives the
-#' number of events that would have to move. Where power is limited, many
+#' sum to the units the test flags. It lies in \[0, 1\], is symmetric in
+#' base and test, and is at least \eqn{1 - D}. Over the flagged units the
+#' shares where each pattern is higher need not balance, so \eqn{1 - S_D}
+#' approximates, and never exceeds, the share of either pattern that would
+#' have to move to remove the flagged differences: the larger of the two
+#' flagged totals. The report prints both totals and the events to move
+#' (that larger total times each pattern's total). Where power is limited, many
 #' genuine differences go unflagged and \eqn{S_D} overstates similarity; the
 #' share of \eqn{D} held by flagged units, \eqn{(1 - S_D)/D}, shows how much
 #' of the total dissimilarity the flags capture, and a note is printed when

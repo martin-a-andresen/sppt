@@ -168,8 +168,22 @@ test_that("S_D and D follow their definitions", {
   expect_equal(x$s_index_d, 1 - 0.5 * sum(abs(b - a)[flag]))
   expect_gte(x$s_index_d, 1 - x$dissimilarity_d)
   expect_equal(x$share_d_flagged, (1 - x$s_index_d) / x$dissimilarity_d)
+  # Flagged share differences by direction; the share to move is the larger
+  d <- b - a
+  expect_equal(x$flagged_test_higher, sum(d[flag & d > 0]))
+  expect_equal(x$flagged_base_higher, -sum(d[flag & d < 0]))
+  expect_equal(1 - x$s_index_d,
+               (x$flagged_test_higher + x$flagged_base_higher) / 2)
+  expect_equal(x$share_to_move, max(x$flagged_test_higher,
+                                    x$flagged_base_higher))
+  expect_gte(x$share_to_move, 1 - x$s_index_d)
   expect_equal(x$events_to_move_base,
-               (1 - x$s_index_d) * sum(vancouver_ct$BNER2021))
+               x$share_to_move * sum(vancouver_ct$BNER2021))
+  # Every unit flagged: the two directions balance and the share to move is D
+  all_f <- sppt:::similarity_d(vancouver_ct$BNER2021, vancouver_ct$BNEC2021,
+                               rep(TRUE, 127))
+  expect_equal(all_f$share_to_move, all_f$dissimilarity_d)
+  expect_equal(all_f$s_index_d, 1 - all_f$dissimilarity_d)
   # Symmetric in base and test for the same flags
   sw <- sppt:::similarity_d(vancouver_ct$BNEC2021, vancouver_ct$BNER2021, flag)
   expect_equal(sw$s_index_d, x$s_index_d)
