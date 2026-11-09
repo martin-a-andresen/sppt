@@ -98,8 +98,10 @@ units hold.
 
 Give a single column, or a column and `"random"`, to ask how far one pattern
 is from random and where it differs. The random distribution spreads the
-column's own total over the units with equal probability, or in proportion
-to their area with `random_by = "area"`.
+column's own total over the units in proportion to their exposure: area for
+polygons, length for lines such as street segments. `random_by = "units"`
+gives every unit equal probability, and naming a column (population, say)
+uses it as the exposure.
 
 ```{r random}
 res_r <- sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
@@ -108,8 +110,8 @@ sppt_similarity(res_r)
 ```
 
 Positive differences mark tracts with more residential burglary than a random
-allocation would give. Against an equal-probability allocation, D is the
-Hoover index of concentration.
+allocation in proportion to area would give. Here D measures how concentrated
+burglary is relative to land area, a Hoover-type index of concentration.
 
 ## Reading the map at fine scales
 

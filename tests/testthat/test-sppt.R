@@ -201,7 +201,9 @@ test_that("a single column is tested against a random distribution", {
   s <- attr(res, "sppt_summary")
   expect_equal(s$base_name, "random")
   expect_equal(s$random$side, "base")
-  expect_equal(res$random, rep(sum(vancouver_ct$BNER2021) / 127, 127),
+  expect_equal(s$random$by, "area")   # default exposure for polygons
+  a <- as.numeric(sf::st_area(vancouver_ct))
+  expect_equal(res$random, sum(vancouver_ct$BNER2021) * a / sum(a),
                tolerance = 1e-6)
   expect_equal(s$n_eligible, 127L)   # units with no events are eligible
   same <- sppt(vancouver_ct, group_col = "id",
@@ -218,19 +220,58 @@ test_that("a single column is tested against a random distribution", {
                     count_col = c("random", "random")), "At most one")
   expect_error(sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
                     fix_base = TRUE), "fix_base")
-  ar <- sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
-             random_by = "area", B = 199, seed = 1, verbose = FALSE,
+  un <- sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
+             random_by = "units", B = 199, seed = 1, verbose = FALSE,
              create_maps = FALSE, arrangement = FALSE)
-  a <- as.numeric(sf::st_area(vancouver_ct))
-  expect_equal(ar$random, sum(vancouver_ct$BNER2021) * a / sum(a),
+  expect_equal(un$random, rep(sum(vancouver_ct$BNER2021) / 127, 127),
                tolerance = 1e-6)
+  expect_equal(attr(un, "sppt_summary")$random$by, "units")
+})
+
+test_that("random_by uses length for lines and accepts an exposure column", {
+  # Street-segment-like layer: tract boundaries as lines
+  ln <- sf::st_cast(sf::st_boundary(vancouver_ct[1:40, ]), "MULTILINESTRING")
+  r_ln <- sppt(ln, group_col = "id", count_col = "BNER2021", B = 199,
+               seed = 1, verbose = FALSE, create_maps = FALSE,
+               arrangement = FALSE)
+  len <- as.numeric(sf::st_length(ln))
+  expect_equal(r_ln$random, sum(ln$BNER2021) * len / sum(len),
+               tolerance = 1e-6)
+  expect_equal(attr(r_ln, "sppt_summary")$random$by, "length")
+
+  d <- vancouver_ct
+  d$pop <- seq_len(127)
+  r_pop <- sppt(d, group_col = "id", count_col = "BNER2021",
+                random_by = "pop", B = 199, seed = 1, verbose = FALSE,
+                create_maps = FALSE, arrangement = FALSE)
+  expect_equal(r_pop$random, sum(d$BNER2021) * d$pop / sum(d$pop),
+               tolerance = 1e-6)
+  expect_equal(attr(r_pop, "sppt_summary")$random$by, "pop")
+
+  expect_error(sppt(d, group_col = "id", count_col = "BNER2021",
+                    random_by = "nope"), "no column")
+  d$chr <- "a"
+  expect_error(sppt(d, group_col = "id", count_col = "BNER2021",
+                    random_by = "chr"), "numeric")
+  d$neg <- c(-1, rep(1, 126))
+  expect_error(sppt(d, group_col = "id", count_col = "BNER2021",
+                    random_by = "neg"), "non-negative")
+  d$z <- c(0, rep(1, 126))
+  expect_warning(sppt(d, group_col = "id", count_col = "BNER2021",
+                      random_by = "z", B = 199, seed = 1, verbose = FALSE,
+                      create_maps = FALSE, arrangement = FALSE),
+                 "zero exposure")
+  pts <- suppressWarnings(sf::st_centroid(vancouver_ct))
+  expect_error(sppt(pts, group_col = "id", count_col = "BNER2021"),
+               "polygons \\(area\\) or all lines")
 })
 
 test_that("the random test flags at about alpha when the pattern is random", {
   set.seed(3)
   d <- vancouver_ct
+  a <- as.numeric(sf::st_area(d))
   rate <- mean(replicate(40, {
-    d$x <- as.integer(stats::rmultinom(1, 1000, rep(1 / 127, 127)))
+    d$x <- as.integer(stats::rmultinom(1, 1000, a / sum(a)))
     mean(sppt(d, group_col = "id", count_col = "x", B = 499,
               verbose = FALSE, create_maps = FALSE,
               arrangement = FALSE)$sig_pvalue)

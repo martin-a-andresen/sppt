@@ -19,7 +19,7 @@ sppt(
   calculate_ci = FALSE,
   conf_level = 0.85,
   fix_base = FALSE,
-  random_by = "units",
+  random_by = "exposure",
   use_percentages = TRUE,
   verbose = TRUE,
   create_maps = TRUE,
@@ -90,10 +90,11 @@ and its observed proportions are treated as fixed. This gives an
 asymmetric test, intended only for comparison against a known reference
 distribution. Default \code{FALSE}.}
 
-\item{random_by}{\code{"units"} (default) or \code{"area"}: how the random
-distribution spreads events when one pattern is \code{"random"}, with equal
-probability for every unit or with probability in proportion to unit
-area.}
+\item{random_by}{How the random distribution spreads events when one
+pattern is \code{"random"}. \code{"exposure"} (default): in proportion to each
+unit's area for polygons or length for lines (street segments, say).
+\code{"units"}: equal probability for every unit. Or the name of a
+non-negative numeric column in \code{data} to use as the exposure.}
 
 \item{use_percentages}{Logical. Express proportions as percentages
 (0-100) rather than as proportions (0-1). Default \code{TRUE}.}
@@ -201,18 +202,22 @@ the observed intensity surface, not spatial randomness.
 
 \strong{Testing against a random distribution.} With \code{count_col = "BNER2021"}
 or \code{c("random", "BNER2021")}, the column is compared with a random
-allocation of its own total to the units, each event placed in a unit
-with equal probability (\code{random_by = "units"}) or with probability in
-proportion to its area (\code{random_by = "area"}). The random distribution is
+allocation of its own total to the units. By default
+(\code{random_by = "exposure"}) each event is placed in a unit with probability
+in proportion to the unit's exposure: its area for polygons, its length
+for lines such as street segments. \code{random_by = "units"} gives every unit
+equal probability, and the name of a numeric column (population, say)
+uses that column as the exposure. The random distribution is
 known exactly, so the test is a Monte Carlo test against it: \code{B} random
 allocations give each unit's envelope of shares, and the p-value is the
 share of allocations that depart from the expected share by at least as
 much as the observed pattern does, \eqn{p = (1 + r)/(B + 1)}. Every unit
-with any area is eligible, including units with no events, which are
+with any exposure is eligible, including units with no events, which are
 informative here. Everything else is reported as usual: the S index and
 its sameness test (now: no more different than a random allocation),
-\eqn{S_D} and \eqn{D} (against an equal-probability allocation, \eqn{D} is
-the Hoover index of concentration), the arrangement test, tiers and maps.
+\eqn{S_D} and \eqn{D} (here \eqn{D} measures how concentrated the pattern
+is relative to its exposure, a Hoover-type index of concentration), the
+arrangement test, tiers and maps.
 The expected counts of the random pattern are added as column \code{random}.
 Confidence intervals and \code{fix_base} do not apply.
 

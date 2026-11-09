@@ -33,8 +33,11 @@
   `sppt_similarity()` returns these values from a result.
 * `sppt()` tests a single pattern against a random distribution:
   `count_col = "BNER2021"` or `c("random", "BNER2021")` compares the column
-  with random allocations of its own total to the units, with equal
-  probability per unit or, with `random_by = "area"`, in proportion to area.
+  with random allocations of its own total to the units, in proportion to
+  each unit's exposure: area for polygons, length for lines such as street
+  segments (`random_by = "exposure"`, the default). `random_by = "units"`
+  gives equal probability per unit; naming a numeric column uses it as the
+  exposure.
   The test is a Monte Carlo test against the random envelope, and all the
   usual output follows (S and sameness, S_D and D, arrangement, tiers, maps).
 * `sppt_longitudinal()` compares the first and last periods as two

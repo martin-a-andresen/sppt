@@ -37,18 +37,22 @@
 #'
 #' **Testing against a random distribution.** With `count_col = "BNER2021"`
 #' or `c("random", "BNER2021")`, the column is compared with a random
-#' allocation of its own total to the units, each event placed in a unit
-#' with equal probability (`random_by = "units"`) or with probability in
-#' proportion to its area (`random_by = "area"`). The random distribution is
+#' allocation of its own total to the units. By default
+#' (`random_by = "exposure"`) each event is placed in a unit with probability
+#' in proportion to the unit's exposure: its area for polygons, its length
+#' for lines such as street segments. `random_by = "units"` gives every unit
+#' equal probability, and the name of a numeric column (population, say)
+#' uses that column as the exposure. The random distribution is
 #' known exactly, so the test is a Monte Carlo test against it: `B` random
 #' allocations give each unit's envelope of shares, and the p-value is the
 #' share of allocations that depart from the expected share by at least as
 #' much as the observed pattern does, \eqn{p = (1 + r)/(B + 1)}. Every unit
-#' with any area is eligible, including units with no events, which are
+#' with any exposure is eligible, including units with no events, which are
 #' informative here. Everything else is reported as usual: the S index and
 #' its sameness test (now: no more different than a random allocation),
-#' \eqn{S_D} and \eqn{D} (against an equal-probability allocation, \eqn{D} is
-#' the Hoover index of concentration), the arrangement test, tiers and maps.
+#' \eqn{S_D} and \eqn{D} (here \eqn{D} measures how concentrated the pattern
+#' is relative to its exposure, a Hoover-type index of concentration), the
+#' arrangement test, tiers and maps.
 #' The expected counts of the random pattern are added as column `random`.
 #' Confidence intervals and `fix_base` do not apply.
 #'
@@ -184,10 +188,11 @@
 #'   and its observed proportions are treated as fixed. This gives an
 #'   asymmetric test, intended only for comparison against a known reference
 #'   distribution. Default `FALSE`.
-#' @param random_by `"units"` (default) or `"area"`: how the random
-#'   distribution spreads events when one pattern is `"random"`, with equal
-#'   probability for every unit or with probability in proportion to unit
-#'   area.
+#' @param random_by How the random distribution spreads events when one
+#'   pattern is `"random"`. `"exposure"` (default): in proportion to each
+#'   unit's area for polygons or length for lines (street segments, say).
+#'   `"units"`: equal probability for every unit. Or the name of a
+#'   non-negative numeric column in `data` to use as the exposure.
 #' @param use_percentages Logical. Express proportions as percentages
 #'   (0-100) rather than as proportions (0-1). Default `TRUE`.
 #' @param verbose Logical. Print the test summary to the console. Default
@@ -293,7 +298,7 @@ sppt <- function(data,
                  calculate_ci       = FALSE,
                  conf_level         = 0.85,
                  fix_base           = FALSE,
-                 random_by          = "units",
+                 random_by          = "exposure",
                  use_percentages    = TRUE,
                  verbose            = TRUE,
                  create_maps        = TRUE,
@@ -331,7 +336,6 @@ sppt <- function(data,
   random_mode <- any(is_rand)
   if (random_mode) {
     count_col[is_rand] <- "random"
-    random_by <- match.arg(random_by, c("units", "area"))
     if (fix_base)
       stop("`fix_base` does not apply when one pattern is \"random\": the ",
            "random distribution is already known.", call. = FALSE)
@@ -415,19 +419,13 @@ sppt <- function(data,
     x
   }
   if (random_mode) {
-    # The random pattern holds the observed total, spread over the units with
-    # equal probability (random_by = "units") or in proportion to area. Its
+    # The random pattern holds the observed total, spread over the units in
+    # proportion to their exposure (area, length, a column, or equal). Its
     # "counts" are the expected counts, which need not be whole numbers.
     obs_name   <- count_col[!is_rand]
     counts_obs <- read_counts(obs_name)
-    w <- if (random_by == "area") {
-      as.numeric(sf::st_area(data))
-    } else {
-      rep(1, n_units)
-    }
-    if (any(!is.finite(w)) || sum(w) <= 0)
-      stop("Unit areas could not be computed for `random_by = \"area\"`.",
-           call. = FALSE)
+    expo       <- exposure_weights(data, random_by)
+    w          <- expo$w
     p_ref        <- w / sum(w)
     counts_rand  <- sum(counts_obs) * p_ref
     counts_a <- if (is_rand[1L]) counts_rand else counts_obs
@@ -503,9 +501,7 @@ sppt <- function(data,
   say("\n", rule_line("="), "Spatial Point Pattern Test\n", rule_line("="),
       sep = "")
   rand_label <- function(N) sprintf(
-    "random (N = %d, %s)", as.integer(round(N)),
-    if (random_by == "area") "probability in proportion to area"
-    else "equal probability per unit")
+    "random (N = %d, %s)", as.integer(round(N)), expo$label)
   say(field_lines("Base", if (random_mode && is_rand[1L]) rand_label(N_a)
                   else sprintf("%s (N = %d)", base_name, N_a)))
   say(field_lines("Test", if (random_mode && is_rand[2L]) rand_label(N_b)
@@ -823,7 +819,7 @@ sppt <- function(data,
   attr(result, "sppt_summary") <- list(
     base_name        = base_name,
     random           = if (random_mode) list(side = if (is_rand[1L]) "base"
-                                             else "test", by = random_by),
+                                             else "test", by = expo$by),
     test_name        = test_name,
     n_units          = n_units,
     n_eligible       = n_eligible,
@@ -924,6 +920,51 @@ choose_B <- function(alpha, n_tests, correction = "none") {
 # B allocations of N events with probabilities p_ref, in blocks. The observed
 # and simulated deviations are computed with the same arithmetic so that
 # equal counts compare as equal.
+# Exposure for the random distribution: unit area for polygons, length for
+# lines, equal weights, or a user-supplied column. Returns the weights, a
+# console label and the resolved choice.
+exposure_weights <- function(data, random_by) {
+  if (!is.character(random_by) || length(random_by) != 1L || is.na(random_by))
+    stop("`random_by` must be \"exposure\", \"units\" or the name of a ",
+         "column in `data`.", call. = FALSE)
+  n <- nrow(data)
+  if (random_by == "units")
+    return(list(w = rep(1, n), label = "equal probability per unit",
+                by = "units"))
+  if (random_by == "exposure") {
+    gt <- unique(as.character(sf::st_geometry_type(data, by_geometry = TRUE)))
+    poly <- c("POLYGON", "MULTIPOLYGON")
+    line <- c("LINESTRING", "MULTILINESTRING")
+    if (all(gt %in% poly)) {
+      w <- as.numeric(sf::st_area(data)); what <- "area"
+    } else if (all(gt %in% line)) {
+      w <- as.numeric(sf::st_length(data)); what <- "length"
+    } else {
+      stop("`random_by = \"exposure\"` needs all polygons (area) or all ",
+           "lines (length); this layer has ", paste(gt, collapse = ", "),
+           ". Use `random_by = \"units\"` or name an exposure column.",
+           call. = FALSE)
+    }
+    label <- paste("probability in proportion to", what)
+  } else {
+    if (!random_by %in% names(data))
+      stop("`random_by` must be \"exposure\", \"units\" or the name of a ",
+           "column in `data`; no column \"", random_by, "\".", call. = FALSE)
+    w <- sf::st_drop_geometry(data)[[random_by]]
+    if (!is.numeric(w))
+      stop("Exposure column `", random_by, "` must be numeric.", call. = FALSE)
+    what  <- random_by
+    label <- paste0("probability in proportion to `", random_by, "`")
+  }
+  if (any(!is.finite(w)) || any(w < 0) || sum(w) <= 0)
+    stop("The exposure (", what, ") must be finite and non-negative, with ",
+         "a positive total.", call. = FALSE)
+  if (any(w == 0))
+    warning(sum(w == 0), " unit(s) have zero exposure (", what, "); a random ",
+            "allocation never places events there.", call. = FALSE)
+  list(w = w, label = label, by = what)
+}
+
 random_counts <- function(N, p_ref, B, scale_factor, counts_obs, active) {
   n <- length(p_ref)
   block <- max(1L, as.integer(getOption("sppt.block_cells", 5e6) %/% n))
