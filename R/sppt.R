@@ -35,6 +35,23 @@
 #' Locations are never permuted, so the null is sampling variability around
 #' the observed intensity surface, not spatial randomness.
 #'
+#' **Testing against a random distribution.** With `count_col = "BNER2021"`
+#' or `c("random", "BNER2021")`, the column is compared with a random
+#' allocation of its own total to the units, each event placed in a unit
+#' with equal probability (`random_by = "units"`) or with probability in
+#' proportion to its area (`random_by = "area"`). The random distribution is
+#' known exactly, so the test is a Monte Carlo test against it: `B` random
+#' allocations give each unit's envelope of shares, and the p-value is the
+#' share of allocations that depart from the expected share by at least as
+#' much as the observed pattern does, \eqn{p = (1 + r)/(B + 1)}. Every unit
+#' with any area is eligible, including units with no events, which are
+#' informative here. Everything else is reported as usual: the S index and
+#' its sameness test (now: no more different than a random allocation),
+#' \eqn{S_D} and \eqn{D} (against an equal-probability allocation, \eqn{D} is
+#' the Hoover index of concentration), the arrangement test, tiers and maps.
+#' The expected counts of the random pattern are added as column `random`.
+#' Confidence intervals and `fix_base` do not apply.
+#'
 #' **Sameness and degree of similarity.** The S index tests sameness: two
 #' realisations of one process give \eqn{S \approx 1 - \alpha}, and the
 #' sameness test asks whether S is lower than that. It does not measure how
@@ -129,6 +146,10 @@
 #'   each spatial unit (for example `"DAUID"` or `"CTUID"`).
 #' @param count_col Character vector of length 2 giving the base and test
 #'   count columns, in that order (for example `c("BNER2003", "BNER2025")`).
+#'   One element may be `"random"`, or a single column may be given alone,
+#'   to test that column against a random distribution of its events (see
+#'   Details); a single column is tested as `c("random", column)`, so that
+#'   positive differences mark units with more events than random.
 #' @param B `"auto"` (default) or an integer of at least 99: the number of
 #'   bootstrap replicates. `"auto"` chooses it from `alpha`, the number of
 #'   eligible units and `correction` (see Details). An integer is used as
@@ -163,6 +184,10 @@
 #'   and its observed proportions are treated as fixed. This gives an
 #'   asymmetric test, intended only for comparison against a known reference
 #'   distribution. Default `FALSE`.
+#' @param random_by `"units"` (default) or `"area"`: how the random
+#'   distribution spreads events when one pattern is `"random"`, with equal
+#'   probability for every unit or with probability in proportion to unit
+#'   area.
 #' @param use_percentages Logical. Express proportions as percentages
 #'   (0-100) rather than as proportions (0-1). Default `TRUE`.
 #' @param verbose Logical. Print the test summary to the console. Default
@@ -268,6 +293,7 @@ sppt <- function(data,
                  calculate_ci       = FALSE,
                  conf_level         = 0.85,
                  fix_base           = FALSE,
+                 random_by          = "units",
                  use_percentages    = TRUE,
                  verbose            = TRUE,
                  create_maps        = TRUE,
@@ -292,11 +318,31 @@ sppt <- function(data,
     stop("`group_col` '", group_col, "' does not uniquely identify rows.",
          call. = FALSE)
 
-  if (length(count_col) != 2L)
-    stop("`count_col` must be a character vector of length 2 (base, test).",
+  # One column, or one column and "random": test the column against a random
+  # allocation of its events to the units.
+  if (!is.character(count_col) || !length(count_col) %in% 1:2)
+    stop("`count_col` must be a character vector of length 2 (base, test), ",
+         "or a single column to test against a random distribution.",
          call. = FALSE)
+  if (length(count_col) == 1L) count_col <- c("random", count_col)
+  is_rand <- tolower(count_col) == "random" & !count_col %in% names(data)
+  if (all(is_rand))
+    stop("At most one element of `count_col` can be \"random\".", call. = FALSE)
+  random_mode <- any(is_rand)
+  if (random_mode) {
+    count_col[is_rand] <- "random"
+    random_by <- match.arg(random_by, c("units", "area"))
+    if (fix_base)
+      stop("`fix_base` does not apply when one pattern is \"random\": the ",
+           "random distribution is already known.", call. = FALSE)
+    if (calculate_ci) {
+      warning("`calculate_ci` is not available against a random ",
+              "distribution; p-values are used.", call. = FALSE)
+      calculate_ci <- FALSE
+    }
+  }
 
-  for (col in count_col) {
+  for (col in count_col[!is_rand]) {
     if (!col %in% names(data))
       stop("`count_col` column '", col, "' not found in data.", call. = FALSE)
     vals <- data[[col]]
@@ -363,13 +409,36 @@ sppt <- function(data,
   test_name <- count_col[2L]
   n_units   <- nrow(data)
 
-  counts_a <- as.integer(data[[base_name]])
-  counts_b <- as.integer(data[[test_name]])
-  counts_a[is.na(counts_a)] <- 0L
-  counts_b[is.na(counts_b)] <- 0L
+  read_counts <- function(nm) {
+    x <- as.integer(data[[nm]])
+    x[is.na(x)] <- 0L
+    x
+  }
+  if (random_mode) {
+    # The random pattern holds the observed total, spread over the units with
+    # equal probability (random_by = "units") or in proportion to area. Its
+    # "counts" are the expected counts, which need not be whole numbers.
+    obs_name   <- count_col[!is_rand]
+    counts_obs <- read_counts(obs_name)
+    w <- if (random_by == "area") {
+      as.numeric(sf::st_area(data))
+    } else {
+      rep(1, n_units)
+    }
+    if (any(!is.finite(w)) || sum(w) <= 0)
+      stop("Unit areas could not be computed for `random_by = \"area\"`.",
+           call. = FALSE)
+    p_ref        <- w / sum(w)
+    counts_rand  <- sum(counts_obs) * p_ref
+    counts_a <- if (is_rand[1L]) counts_rand else counts_obs
+    counts_b <- if (is_rand[2L]) counts_rand else counts_obs
+  } else {
+    counts_a <- read_counts(base_name)
+    counts_b <- read_counts(test_name)
+  }
 
-  N_a <- sum(counts_a)
-  N_b <- sum(counts_b)
+  N_a <- if (random_mode && is_rand[1L]) sum(counts_obs) else sum(counts_a)
+  N_b <- if (random_mode && is_rand[2L]) sum(counts_obs) else sum(counts_b)
 
   # Units empty in both patterns are excluded from inference, and from the
   # number of tests that sets B under a correction.
@@ -433,8 +502,14 @@ sppt <- function(data,
   # Lines are wrapped to fit 70 columns; see field_lines().
   say("\n", rule_line("="), "Spatial Point Pattern Test\n", rule_line("="),
       sep = "")
-  say(field_lines("Base", sprintf("%s (N = %d)", base_name, N_a)))
-  say(field_lines("Test", sprintf("%s (N = %d)", test_name, N_b)))
+  rand_label <- function(N) sprintf(
+    "random (N = %d, %s)", as.integer(round(N)),
+    if (random_by == "area") "probability in proportion to area"
+    else "equal probability per unit")
+  say(field_lines("Base", if (random_mode && is_rand[1L]) rand_label(N_a)
+                  else sprintf("%s (N = %d)", base_name, N_a)))
+  say(field_lines("Test", if (random_mode && is_rand[2L]) rand_label(N_b)
+                  else sprintf("%s (N = %d)", test_name, N_b)))
   say(field_lines("Units", n_units))
   say(field_lines("lambda_min", sprintf("%.3f", lambda_min)))
   say(field_lines("Bootstrap B", sprintf("%d (%s)", B, B_note)))
@@ -472,7 +547,16 @@ sppt <- function(data,
     as.numeric(n_units) * B > max_cells
   r_count  <- NULL
 
-  if (valid_bootstrap) {
+  if (valid_bootstrap && random_mode) {
+    # Monte Carlo test against the random distribution. That distribution is
+    # known, so only the random allocations vary: B allocations of the
+    # observed total, and each unit's observed share compared with the
+    # envelope of its shares across them. Resampling the observed pattern as
+    # well would count its sampling variation twice.
+    if (calculate_pvalues)
+      r_count <- random_counts(sum(counts_obs), p_ref, B, scale_factor,
+                               counts_obs, active)
+  } else if (valid_bootstrap) {
     p_a <- counts_a / N_a
     p_b <- counts_b / N_b
     if (blocked) {
@@ -631,6 +715,7 @@ sppt <- function(data,
 
   # -- 11. Append result columns ----------------------------------------------
   result <- data
+  if (random_mode) result[["random"]] <- round(counts_rand, 6)
   result$base_prop         <- round(prop_a, 6)
   result$test_prop         <- round(prop_b, 6)
   result$difference        <- round(obs_diff, 6)
@@ -679,7 +764,10 @@ sppt <- function(data,
       "p %s (%s); S >= %.4f needed at tau = %.2f; %s",
       fmt_p(sameness$p_value), sameness$method, sameness$threshold,
       sameness$tau,
-      if (isTRUE(sameness$same))
+      if (random_mode) {
+        if (isTRUE(sameness$same)) "no more different than a random allocation"
+        else "more different than a random allocation"
+      } else if (isTRUE(sameness$same))
         "no more different than two realisations of one process"
       else "more different than two realisations of one process")))
     if (n_eligible < n_units * 0.75)
@@ -734,6 +822,8 @@ sppt <- function(data,
   # -- 13. Summary attribute and class ----------------------------------------
   attr(result, "sppt_summary") <- list(
     base_name        = base_name,
+    random           = if (random_mode) list(side = if (is_rand[1L]) "base"
+                                             else "test", by = random_by),
     test_name        = test_name,
     n_units          = n_units,
     n_eligible       = n_eligible,
@@ -828,6 +918,25 @@ choose_B <- function(alpha, n_tests, correction = "none") {
        binding = names(need)[which.max(need)],
        B_correction = if (correction == "none") 0L else
          round_up(need[["correction"]]))
+}
+
+# Exceedance counts for the Monte Carlo test against a random distribution:
+# B allocations of N events with probabilities p_ref, in blocks. The observed
+# and simulated deviations are computed with the same arithmetic so that
+# equal counts compare as equal.
+random_counts <- function(N, p_ref, B, scale_factor, counts_obs, active) {
+  n <- length(p_ref)
+  block <- max(1L, as.integer(getOption("sppt.block_cells", 5e6) %/% n))
+  sizes <- diff(unique(c(seq.int(0L, B, by = block), B)))
+  act <- which(active)
+  ref <- p_ref[act] * scale_factor
+  obs <- abs(counts_obs[act] / N * scale_factor - ref)
+  r <- numeric(length(act))
+  for (m in sizes) {
+    x <- stats::rmultinom(m, N, p_ref)[act, , drop = FALSE] / N * scale_factor
+    r <- r + rowSums(abs(x - ref) >= obs)
+  }
+  r
 }
 
 # P-value exceedance counts computed in blocks of replicates. Two passes over

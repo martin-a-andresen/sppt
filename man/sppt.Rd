@@ -19,6 +19,7 @@ sppt(
   calculate_ci = FALSE,
   conf_level = 0.85,
   fix_base = FALSE,
+  random_by = "units",
   use_percentages = TRUE,
   verbose = TRUE,
   create_maps = TRUE,
@@ -38,7 +39,11 @@ sppt(
 each spatial unit (for example \code{"DAUID"} or \code{"CTUID"}).}
 
 \item{count_col}{Character vector of length 2 giving the base and test
-count columns, in that order (for example \code{c("BNER2003", "BNER2025")}).}
+count columns, in that order (for example \code{c("BNER2003", "BNER2025")}).
+One element may be \code{"random"}, or a single column may be given alone,
+to test that column against a random distribution of its events (see
+Details); a single column is tested as \code{c("random", column)}, so that
+positive differences mark units with more events than random.}
 
 \item{B}{\code{"auto"} (default) or an integer of at least 99: the number of
 bootstrap replicates. \code{"auto"} chooses it from \code{alpha}, the number of
@@ -84,6 +89,11 @@ used when \code{calculate_ci = TRUE}.}
 and its observed proportions are treated as fixed. This gives an
 asymmetric test, intended only for comparison against a known reference
 distribution. Default \code{FALSE}.}
+
+\item{random_by}{\code{"units"} (default) or \code{"area"}: how the random
+distribution spreads events when one pattern is \code{"random"}, with equal
+probability for every unit or with probability in proportion to unit
+area.}
 
 \item{use_percentages}{Logical. Express proportions as percentages
 (0-100) rather than as proportions (0-1). Default \code{TRUE}.}
@@ -188,6 +198,23 @@ re-aggregates them to the areal units; drawing counts from the
 multinomial distribution of observed shares is the closed-form equivalent.
 Locations are never permuted, so the null is sampling variability around
 the observed intensity surface, not spatial randomness.
+
+\strong{Testing against a random distribution.} With \code{count_col = "BNER2021"}
+or \code{c("random", "BNER2021")}, the column is compared with a random
+allocation of its own total to the units, each event placed in a unit
+with equal probability (\code{random_by = "units"}) or with probability in
+proportion to its area (\code{random_by = "area"}). The random distribution is
+known exactly, so the test is a Monte Carlo test against it: \code{B} random
+allocations give each unit's envelope of shares, and the p-value is the
+share of allocations that depart from the expected share by at least as
+much as the observed pattern does, \eqn{p = (1 + r)/(B + 1)}. Every unit
+with any area is eligible, including units with no events, which are
+informative here. Everything else is reported as usual: the S index and
+its sameness test (now: no more different than a random allocation),
+\eqn{S_D} and \eqn{D} (against an equal-probability allocation, \eqn{D} is
+the Hoover index of concentration), the arrangement test, tiers and maps.
+The expected counts of the random pattern are added as column \code{random}.
+Confidence intervals and \code{fix_base} do not apply.
 
 \strong{Sameness and degree of similarity.} The S index tests sameness: two
 realisations of one process give \eqn{S \approx 1 - \alpha}, and the

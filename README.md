@@ -8,7 +8,8 @@ such as crimes counted by census tract.
 * `sppt()` compares two patterns unit by unit with bounded Monte Carlo
   bootstrap p-values, and summarises the map with the robust S index, a
   sameness test and a test of the spatial arrangement of the differences.
-  Flagged units are ranked by confidence tier.
+  Flagged units are ranked by confidence tier. Give a single column to test
+  it against a random distribution.
 * `sppt_clusters()` tests whether clusters of flagged units are larger than
   false positives alone would produce.
 * `sppt_similarity()` returns the degree of similarity S_D and the index of

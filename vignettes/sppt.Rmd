@@ -94,6 +94,23 @@ Where power is limited many real differences are not flagged and S_D
 overstates similarity, so `share_d_flagged` reports how much of D the flagged
 units hold.
 
+## Testing against a random distribution
+
+Give a single column, or a column and `"random"`, to ask how far one pattern
+is from random and where it differs. The random distribution spreads the
+column's own total over the units with equal probability, or in proportion
+to their area with `random_by = "area"`.
+
+```{r random}
+res_r <- sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
+              B = 999, seed = 42, verbose = FALSE, create_maps = FALSE)
+sppt_similarity(res_r)
+```
+
+Positive differences mark tracts with more residential burglary than a random
+allocation would give. Against an equal-probability allocation, D is the
+Hoover index of concentration.
+
 ## Reading the map at fine scales
 
 At census tracts most flagged units are trustworthy individually. At finer

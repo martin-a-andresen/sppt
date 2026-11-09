@@ -48,7 +48,9 @@ significantly. The **envelope** results use bootstrap confidence intervals: a
 unit is stable when all its intervals overlap. For units that are not stable,
 a trend is fitted to the unit's share of events over time.
 
-`summary()` gives the S indices and trend counts at a glance.
+`summary()` gives the S indices, the comparison of the first and last
+periods (robust S, its sameness test and S_D) and the trend counts at a
+glance.
 
 ```{r}
 summary(res)
@@ -122,6 +124,7 @@ res <- sppt_longitudinal(
   B                   = "auto",     # 4999 at alpha = 0.05
   seed                = NULL,       # set for reproducible results
   alpha               = 0.05,       # unit-level significance level
+  sameness_tau        = 0.05,       # sameness test, first vs last period
   calculate_pvalues   = TRUE,       # p-value results alongside envelopes
   conf_level          = 0.85,       # envelope level; about alpha = 0.05
   fix_base            = FALSE,      # TRUE = do not bootstrap the base period

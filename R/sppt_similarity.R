@@ -66,9 +66,10 @@ sppt_similarity <- function(result) {
     stop("`result` has no p-values; run sppt() with ",
          "calculate_pvalues = TRUE.", call. = FALSE)
   s <- attr(result, "sppt_summary")
+  # Counts may be the expected counts of a random pattern, so not integers
   cnt <- function(nm) {
-    x <- as.integer(result[[nm]])
-    x[is.na(x)] <- 0L
+    x <- as.numeric(result[[nm]])
+    x[is.na(x)] <- 0
     x
   }
   counts_a <- cnt(s$base_name)

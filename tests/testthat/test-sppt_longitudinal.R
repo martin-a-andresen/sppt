@@ -69,3 +69,22 @@ test_that("the p-value average index is a share of the T - 1 test periods", {
   expect_equal(res$BNER_max_overlap_proportion_p, 1 - share)
   expect_equal(attr(res, "si_average_p"), mean(1 - share))
 })
+
+test_that("first against last matches sppt() on the same two periods", {
+  res <- sppt_longitudinal(vancouver_ct, group_col = "id",
+                           count_col = paste0("BNER", 2003:2006),
+                           B = 199, seed = 1, verbose = FALSE,
+                           create_maps = FALSE, create_time_plot = FALSE)
+  fl <- attr(res, "first_last")
+  p <- attr(res, "pvalue_matrix")[, 4]
+  elig <- !(vancouver_ct$BNER2003 == 0 & vancouver_ct$BNER2006 == 0)
+  expect_equal(fl$n_sig, sum(elig & p <= 0.05))
+  expect_equal(fl$s_index, 1 - fl$n_sig / sum(elig))
+  d <- sppt(vancouver_ct, group_col = "id",
+            count_col = c("BNER2003", "BNER2006"), B = 199, seed = 1,
+            verbose = FALSE, create_maps = FALSE, arrangement = FALSE)
+  expect_equal(fl$similarity$dissimilarity_d,
+               attr(d, "sppt_summary")$similarity$dissimilarity_d)
+  expect_false(is.null(fl$sameness))
+  expect_output(summary(res), "against BNER2006")
+})

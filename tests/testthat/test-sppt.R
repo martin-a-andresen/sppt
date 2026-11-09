@@ -28,7 +28,8 @@ test_that("exporting without a directory is an error", {
 })
 
 test_that("inputs are validated", {
-  expect_error(sppt(vancouver_ct, group_col = "id", count_col = "BNER2003"),
+  expect_error(sppt(vancouver_ct, group_col = "id",
+                    count_col = c("BNER2003", "BNER2004", "BNER2005")),
                "length 2")
   expect_error(sppt(vancouver_ct, group_col = "nope",
                     count_col = c("BNER2003", "BNER2025")), "not found")
@@ -191,4 +192,49 @@ test_that("the S_D note appears when flagged units hold little of D", {
     vancouver_ct, group_col = "id", count_col = c("BNER2021", "BNEC2021"),
     B = 4999, seed = 20261108L, create_maps = FALSE, arrangement = FALSE))
   expect_false(any(grepl("overstates similarity", out_ct)))
+})
+
+test_that("a single column is tested against a random distribution", {
+  res <- sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
+              B = 199, seed = 1, verbose = FALSE, create_maps = FALSE,
+              arrangement = FALSE)
+  s <- attr(res, "sppt_summary")
+  expect_equal(s$base_name, "random")
+  expect_equal(s$random$side, "base")
+  expect_equal(res$random, rep(sum(vancouver_ct$BNER2021) / 127, 127),
+               tolerance = 1e-6)
+  expect_equal(s$n_eligible, 127L)   # units with no events are eligible
+  same <- sppt(vancouver_ct, group_col = "id",
+               count_col = c("random", "BNER2021"), B = 199, seed = 1,
+               verbose = FALSE, create_maps = FALSE, arrangement = FALSE)
+  expect_equal(same$pvalue, res$pvalue)
+  # Either side can be random; p-values do not depend on the side
+  rev <- sppt(vancouver_ct, group_col = "id",
+              count_col = c("BNER2021", "random"), B = 199, seed = 1,
+              verbose = FALSE, create_maps = FALSE, arrangement = FALSE)
+  expect_equal(rev$pvalue, res$pvalue)
+  expect_equal(rev$sig_pvalue_dir, -res$sig_pvalue_dir)
+  expect_error(sppt(vancouver_ct, group_col = "id",
+                    count_col = c("random", "random")), "At most one")
+  expect_error(sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
+                    fix_base = TRUE), "fix_base")
+  ar <- sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
+             random_by = "area", B = 199, seed = 1, verbose = FALSE,
+             create_maps = FALSE, arrangement = FALSE)
+  a <- as.numeric(sf::st_area(vancouver_ct))
+  expect_equal(ar$random, sum(vancouver_ct$BNER2021) * a / sum(a),
+               tolerance = 1e-6)
+})
+
+test_that("the random test flags at about alpha when the pattern is random", {
+  set.seed(3)
+  d <- vancouver_ct
+  rate <- mean(replicate(40, {
+    d$x <- as.integer(stats::rmultinom(1, 1000, rep(1 / 127, 127)))
+    mean(sppt(d, group_col = "id", count_col = "x", B = 499,
+              verbose = FALSE, create_maps = FALSE,
+              arrangement = FALSE)$sig_pvalue)
+  }))
+  expect_gt(rate, 0.025)
+  expect_lt(rate, 0.065)
 })

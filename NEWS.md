@@ -31,6 +31,16 @@
   move. A note is printed when flagged units hold less than 60% of D. S tests
   sameness; S_D measures how similar two patterns are. New
   `sppt_similarity()` returns these values from a result.
+* `sppt()` tests a single pattern against a random distribution:
+  `count_col = "BNER2021"` or `c("random", "BNER2021")` compares the column
+  with random allocations of its own total to the units, with equal
+  probability per unit or, with `random_by = "area"`, in proportion to area.
+  The test is a Monte Carlo test against the random envelope, and all the
+  usual output follows (S and sameness, S_D and D, arrangement, tiers, maps).
+* `sppt_longitudinal()` compares the first and last periods as two
+  patterns: robust S with its sameness test (new argument `sameness_tau`),
+  and S_D with D, printed in the report and `summary()` and stored as
+  `attr(x, "first_last")`.
 * New `sppt_clusters()` tests clusters of flagged units against the
   clusters that false positives alone produce on the same map, under the
   one-gap or contiguous rule. Clusters are built within each direction of
