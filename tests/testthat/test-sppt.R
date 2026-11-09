@@ -153,3 +153,42 @@ test_that("console output fits in 70 columns", {
   expect_lte(wide(capture.output(print(sppt_clusters(res, nsim = 99,
                                                      seed = 1)))), 70)
 })
+
+test_that("S_D and D follow their definitions", {
+  res <- sppt(vancouver_ct, group_col = "id",
+              count_col = c("BNER2021", "BNEC2021"), B = 199, seed = 1,
+              verbose = FALSE, create_maps = FALSE, arrangement = FALSE)
+  x <- sppt_similarity(res)
+  a <- vancouver_ct$BNER2021 / sum(vancouver_ct$BNER2021)
+  b <- vancouver_ct$BNEC2021 / sum(vancouver_ct$BNEC2021)
+  flag <- res$sig_pvalue == 1L & !is.na(res$sig_pvalue)
+  # D does not depend on the bootstrap
+  expect_equal(round(x$dissimilarity_d, 5), 0.48485)
+  expect_equal(x$s_index_d, 1 - 0.5 * sum(abs(b - a)[flag]))
+  expect_gte(x$s_index_d, 1 - x$dissimilarity_d)
+  expect_equal(x$share_d_flagged, (1 - x$s_index_d) / x$dissimilarity_d)
+  expect_equal(x$events_to_move_base,
+               (1 - x$s_index_d) * sum(vancouver_ct$BNER2021))
+  # Symmetric in base and test for the same flags
+  sw <- sppt:::similarity_d(vancouver_ct$BNEC2021, vancouver_ct$BNER2021, flag)
+  expect_equal(sw$s_index_d, x$s_index_d)
+  # Stored in the summary, printed by sppt() and summary()
+  expect_equal(attr(res, "sppt_summary")$similarity$s_index_d, x$s_index_d)
+  expect_output(summary(res), "S_D")
+  # Identical patterns give D = 0 and S_D = 1
+  same <- sppt:::similarity_d(1:5, 2 * (1:5), rep(TRUE, 5))
+  expect_equal(same$dissimilarity_d, 0)
+  expect_equal(same$s_index_d, 1)
+  expect_true(is.na(same$share_d_flagged))
+})
+
+test_that("the S_D note appears when flagged units hold little of D", {
+  out <- capture.output(suppressWarnings(sppt(
+    vancouver_da, group_col = "id", count_col = c("BNER2021", "BNEC2021"),
+    B = 4999, seed = 20261108L, create_maps = FALSE, arrangement = FALSE)))
+  expect_true(any(grepl("overstates similarity", out)))
+  out_ct <- capture.output(sppt(
+    vancouver_ct, group_col = "id", count_col = c("BNER2021", "BNEC2021"),
+    B = 4999, seed = 20261108L, create_maps = FALSE, arrangement = FALSE))
+  expect_false(any(grepl("overstates similarity", out_ct)))
+})

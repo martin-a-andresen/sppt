@@ -24,6 +24,13 @@
   and a new tier map is available as `sppt_map(res, "tiers")`.
 * `sppt()` notes a widespread shift (most flagged units share one direction
   and lie outside any cluster) and adds it to the two-way verdict.
+* `sppt()` reports a degree of similarity, S_D: one minus half the sum of
+  absolute differences in shares over the flagged units, alongside the index
+  of dissimilarity D (Duncan and Duncan 1955), the share of D held by
+  flagged units and the number of events of each pattern that would have to
+  move. A note is printed when flagged units hold less than 60% of D. S tests
+  sameness; S_D measures how similar two patterns are. New
+  `sppt_similarity()` returns these values from a result.
 * New `sppt_clusters()` tests clusters of flagged units against the
   clusters that false positives alone produce on the same map, under the
   one-gap or contiguous rule. Clusters are built within each direction of

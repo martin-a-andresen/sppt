@@ -8,6 +8,8 @@
 #' * [sppt_longitudinal()] compares every period of a time series against the
 #'   first period and classifies unit-level trajectories.
 #' * [sppt_sameness()] tests a robust S index against sameness.
+#' * [sppt_similarity()] gives the degree of similarity, S_D, and the index
+#'   of dissimilarity.
 #' * [sppt_map()] redraws the maps from either analysis with a chosen layout.
 #'
 #' @references

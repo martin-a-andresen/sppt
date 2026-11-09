@@ -145,7 +145,8 @@ confidence bounds for base and test (CI only).}
 not (CI only).}
 \item{\code{sig_ci_dir}}{Direction of CI-based differences (CI only).}
 }
-The attribute \code{"sppt_summary"} holds the robust S index, the sameness and
+The attribute \code{"sppt_summary"} holds the robust S index, \eqn{S_D} and
+the dissimilarity index (element \code{similarity}), the sameness and
 arrangement tests, the tier counts and the settings; \code{summary()} prints
 it. The attribute \code{"sppt_maps"} holds the maps as a named list of
 \code{ggplot} objects (\code{difference}, \code{pvalue}, \code{tiers} with the arrangement
@@ -187,6 +188,30 @@ re-aggregates them to the areal units; drawing counts from the
 multinomial distribution of observed shares is the closed-form equivalent.
 Locations are never permuted, so the null is sampling variability around
 the observed intensity surface, not spatial randomness.
+
+\strong{Sameness and degree of similarity.} The S index tests sameness: two
+realisations of one process give \eqn{S \approx 1 - \alpha}, and the
+sameness test asks whether S is lower than that. It does not measure how
+similar two patterns are. For that, \code{sppt()} also reports
+\deqn{S_D = 1 - \frac{1}{2}\sum_{i \in F} |p_{bi} - p_{ai}|,}{S_D = 1 -
+1/2 * sum over flagged units of |p_bi - p_ai|,}
+where \eqn{p_{ai}} and \eqn{p_{bi}} are unit \eqn{i}'s shares of all
+events in the base and test patterns (as proportions) and \eqn{F} is the
+set of units flagged at \code{alpha}. Summed over all units, half the absolute
+difference in shares is the index of dissimilarity, \eqn{D} (Duncan and
+Duncan 1955), the share of either pattern that would have to move to other
+units to reproduce the other pattern (Hoover 1936). \eqn{S_D} limits that
+redistribution to the units the test flags, so it is the share of each
+pattern already in place once only significant differences count. It lies
+in [0, 1], is symmetric in base and test, and is at least
+\eqn{1 - D}. Multiplied by each pattern's total, \eqn{1 - S_D} gives the
+number of events that would have to move. Where power is limited, many
+genuine differences go unflagged and \eqn{S_D} overstates similarity; the
+share of \eqn{D} held by flagged units, \eqn{(1 - S_D)/D}, shows how much
+of the total dissimilarity the flags capture, and a note is printed when
+it is below 0.6, a judgement call rather than a calibrated threshold.
+\eqn{S_D} always uses the uncorrected flags, \eqn{p \le \alpha}. See
+\code{\link[=sppt_similarity]{sppt_similarity()}}.
 
 \strong{Multiple testing.} No correction is applied by default. Simulation
 evidence shows that corrections remove much of the power at fine spatial
@@ -277,8 +302,16 @@ Andresen, M.A. (2026). Testing longitudinal change in spatial
 distributions and patterns: An extension of the spatial point pattern
 test. \emph{Annals of the American Association of Geographers}, in press.
 \doi{10.1080/24694452.2026.2733304}
+
+Duncan, O.D. and Duncan, B. (1955). A methodological analysis of
+segregation indexes. \emph{American Sociological Review}, 20, 210-217.
+\doi{10.2307/2088328}
+
+Hoover, E.M. (1936). The measurement of industrial localization. \emph{The
+Review of Economic Statistics}, 18, 162-171.
 }
 \seealso{
-\code{\link[=sppt_longitudinal]{sppt_longitudinal()}}, \code{\link[=sppt_sameness]{sppt_sameness()}}, \code{\link[=sppt_clusters]{sppt_clusters()}},
+\code{\link[=sppt_longitudinal]{sppt_longitudinal()}}, \code{\link[=sppt_sameness]{sppt_sameness()}}, \code{\link[=sppt_similarity]{sppt_similarity()}},
+\code{\link[=sppt_clusters]{sppt_clusters()}},
 \code{\link[=sppt_map]{sppt_map()}}, \link{vancouver_ct}
 }

@@ -51,6 +51,9 @@ The console report gives:
   share of events did not change significantly;
 * the **sameness test**, which asks whether that S index is lower than two
   realisations of one process would give;
+* **S_D**, the degree of similarity: the share of each pattern already in
+  place once only the flagged units are allowed to differ, with the index of
+  dissimilarity D and the number of events that would have to move;
 * the **arrangement test**, Moran's I on the signed evidence surface, which
   asks whether the differences cluster in space;
 * the **confidence tiers** of the flagged units (core, edge, outside);
@@ -75,6 +78,21 @@ The p-value is the bounded Monte Carlo form $p = (1 + r)/(B + 1)$, so it is
 never exactly zero; with `B = 999` the smallest possible value is 0.001.
 The default, `B = "auto"`, uses 4999 replicates at `alpha = 0.05`, more at
 smaller `alpha` or under a correction.
+
+## Sameness and degree of similarity
+
+S tests sameness: is S lower than the 1 - alpha that two realisations of one
+process give? It does not say how far apart two different patterns are. S_D
+does, in events: `sppt_similarity()` returns it with the index of
+dissimilarity D.
+
+```{r similarity}
+sppt_similarity(res)
+```
+
+Where power is limited many real differences are not flagged and S_D
+overstates similarity, so `share_d_flagged` reports how much of D the flagged
+units hold.
 
 ## Reading the map at fine scales
 
