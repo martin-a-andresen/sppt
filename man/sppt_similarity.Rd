@@ -4,81 +4,98 @@
 \alias{sppt_similarity}
 \title{Degree of similarity between two spatial patterns}
 \usage{
-sppt_similarity(result)
+sppt_similarity(result, level = 0.95, tol = 5e-04, seed = NULL)
 }
 \arguments{
 \item{result}{A result returned by \code{\link[=sppt]{sppt()}} with p-values.}
+
+\item{level}{Probability that a retest of the redistributed patterns
+gives \eqn{S \ge 1 - \alpha}. Default 0.95.}
+
+\item{tol}{Bisection tolerance on the margin. Default 0.0005.}
+
+\item{seed}{Optional seed for the bootstraps. Without one the current
+random-number stream is used, and then restored.}
 }
 \value{
-A one-row data frame with columns \code{s_index} (robust S),
-\code{s_index_d} (\eqn{S_D}), \code{dissimilarity_d} (\eqn{D}), \code{share_d_flagged},
-\code{n_flagged} (units flagged without a correction), \code{n_eligible},
-\code{flagged_test_higher} (\eqn{H_b}), \code{flagged_base_higher}
-(\eqn{H_a}), \code{share_to_move} (\eqn{\max(H_a, H_b)}), and
-\code{events_to_move_base} and \code{events_to_move_test} (\code{share_to_move} times
-each pattern's total).
+A data frame with one row per direction (one row against a
+random distribution): \code{moved} (the pattern redistributed), \code{share} (the
+share of that pattern moved), \code{events} (the number of events moved),
+\code{margin} (the margin \eqn{q}) and \code{p_retest} (the probability that a
+retest gives \eqn{S \ge 1 - \alpha}). Attributes: \code{s_index_d}
+(\eqn{S_D}, one minus the smaller share), \code{level}, \code{alpha}, \code{B}, and
+\code{shares}, a list with the redistributed shares of each unit for each
+direction (proportions, in the order of the units), which can be mapped
+against the observed shares to see where events move.
 }
 \description{
-Returns the degree-of-similarity measures of a \code{\link[=sppt]{sppt()}} result: the S
-index, \eqn{S_D}, the index of dissimilarity \eqn{D}, the share of
-\eqn{D} held by flagged units, the flagged share differences in each
-direction, and the share and number of events of each pattern that would
-have to move to remove the differences at the flagged units.
+\eqn{S_D} is one minus the smallest share of events that would have to be
+redistributed, within one pattern, for the two patterns to be considered
+the same: for a retest of the redistributed patterns to give
+\eqn{S \ge 1 - \alpha} with probability \code{level}. It is computed in both
+directions, moving the base pattern with the test pattern fixed and the
+reverse, and \eqn{S_D} uses the smaller share.
+
+\code{sppt_similarity()} computes it for an existing \code{\link[=sppt]{sppt()}} result. Running
+\code{\link[=sppt]{sppt()}} with \code{similarity = TRUE} computes it as part of the test, and
+\code{sppt_similarity()} then returns the stored values.
 }
 \details{
-With \eqn{p_{ai}} and \eqn{p_{bi}} each unit's share of all events in the
-base and test patterns (as proportions, whatever \code{use_percentages} was),
-\deqn{D = \frac{1}{2}\sum_i |p_{bi} - p_{ai}|, \qquad
-S_D = 1 - \frac{1}{2}\sum_{i \in F} |p_{bi} - p_{ai}|,}{D = 1/2 * sum over
-all units of |p_bi - p_ai|,  S_D = 1 - 1/2 * sum over flagged units of
-|p_bi - p_ai|,}
-where \eqn{F} is the set of units flagged at \code{alpha} without a multiple
-testing correction (units empty in both patterns are never flagged).
+\strong{What is redistributed.} Each pattern is treated as shares of its own
+total, at double precision, so a redistribution moves shares, and the
+number of events it represents is that share times the pattern's total.
+The pattern not being moved, and the totals, stay as observed.
 
-\eqn{D} is the index of dissimilarity (Duncan and Duncan 1955): the share
-of either pattern that would have to move to other units for the two to
-match, the redistribution reading of Hoover (1936). \eqn{S_D} counts only
-the flagged units. It lies in [0, 1], is symmetric in base and test,
-and is at least \eqn{1 - D}.
+\strong{When a unit stops differing.} A unit is flagged when its p-value,
+\eqn{(1 + r)/(B + 1)}, is at most \eqn{\alpha}, where \eqn{r} counts the
+centred bootstrap differences at least as large as the observed one. So a
+unit is not flagged exactly when its share difference is within a
+half-width given by its bootstrap distribution. Moving a unit only to that
+boundary is not enough: on a retest it is flagged about half the time,
+through Monte Carlo variation, and its interval narrows where the moved
+pattern loses events. Each unit is therefore moved until the share of
+bootstrap differences at least as large as its own reaches a margin
+\eqn{q \ge \alpha}, and the intervals are recomputed at the moved shares
+until they settle.
 
-Over all units the shares where the test pattern is higher and where the
-base pattern is higher balance, so \eqn{D} is exactly the share to move.
-Over the flagged units alone they need not balance. Write \eqn{H_b} for
-the sum of \eqn{p_{bi} - p_{ai}} over flagged units where the test
-pattern is higher and \eqn{H_a} for the sum of \eqn{p_{ai} - p_{bi}}
-where the base pattern is higher. Removing the differences at the flagged
-units moves \eqn{\max(H_a, H_b)} of either pattern, the excess going to
-or coming from unflagged units, while \eqn{1 - S_D = (H_a + H_b)/2}. So
-\eqn{1 - S_D} approximates, and never exceeds, the share to move; the two
-are equal when \eqn{H_a = H_b}, as when every unit is flagged.
-\code{share_to_move} and the events to move use \eqn{\max(H_a, H_b)}.
+\strong{The minimum.} For a given margin, the over-represented units must give
+up \eqn{E} and the under-represented units must gain \eqn{F}; the smallest
+redistribution moves \eqn{\max(E, F)}, the difference going to, or coming
+from, units with room inside their intervals.
 
-The two indices answer different questions. S tests sameness: it is
-compared with \eqn{1 - \alpha}, what two realisations of one process give,
-and says nothing about how far apart two different patterns are.
-\eqn{S_D} measures that distance in events. Where power is limited many
-genuine differences are not flagged, so \eqn{S_D} overstates similarity;
-\code{share_d_flagged}, \eqn{(1 - S_D)/D}, shows how much of the total
-dissimilarity the flagged units hold. \code{\link[=sppt]{sppt()}} prints a note when it is
-below 0.6. That cut-off is a judgement call, not a calibrated threshold.
-\eqn{D} itself is not a test: two realisations of one process give
-\eqn{D > 0} through sampling variation alone, the more so the fewer events
-per unit.
+\strong{The retest.} At the moved shares, each unit's chance of being flagged
+on a retest is a binomial probability, from a separate bootstrap, so the
+number flagged has a Poisson-binomial distribution and the probability of
+\eqn{S \ge 1 - \alpha} follows exactly. The margin is the smallest
+\eqn{q}, found by bisection to within \code{tol}, at which that probability
+reaches \code{level}. A retest here means testing the redistributed patterns
+again, with the same totals and a new bootstrap.
+
+\strong{Properties.} \eqn{S_D} lies in [0, 1] and equals 1 when no
+redistribution is needed. The two directions differ because moving a
+pattern changes its own sampling variance, and with it the intervals. The
+redistribution needed depends on power: with few events per unit the
+intervals are wide and less has to move, so \eqn{S_D} at a fine scale is
+not comparable with \eqn{S_D} at a coarse one.
+
+The calculation always uses the uncorrected flags and
+\eqn{B} = 4999 or the larger number that \code{alpha} needs (as with
+\code{B = "auto"} without a correction), or \code{B} itself if a number was given
+and no correction was used. Against a random distribution only the
+observed pattern is moved. With \code{fix_base = TRUE} the base is not
+bootstrapped, as in the test. It takes roughly 30 to 80 bootstraps per
+direction: seconds for a hundred units, a few minutes for a thousand.
+The random-number state is restored afterwards, so the rest of the
+result is the same with or without it.
 }
 \examples{
+\donttest{
 res <- sppt(vancouver_ct, group_col = "id",
-            count_col = c("BNER2021", "BNEC2021"),
-            B = 999, seed = 1, verbose = FALSE, create_maps = FALSE)
-sppt_similarity(res)
-
+            count_col = c("BNER2021", "BNEC2021"), seed = 1,
+            verbose = FALSE, create_maps = FALSE)
+sppt_similarity(res, seed = 1)
 }
-\references{
-Duncan, O.D. and Duncan, B. (1955). A methodological analysis of
-segregation indexes. \emph{American Sociological Review}, 20, 210-217.
-\doi{10.2307/2088328}
 
-Hoover, E.M. (1936). The measurement of industrial localization. \emph{The
-Review of Economic Statistics}, 18, 162-171.
 }
 \seealso{
 \code{\link[=sppt]{sppt()}}, \code{\link[=sppt_sameness]{sppt_sameness()}}

@@ -49,7 +49,8 @@ unit is stable when all its intervals overlap. For units that are not stable,
 a trend is fitted to the unit's share of events over time.
 
 `summary()` gives the S indices, the comparison of the first and last
-periods (robust S, its sameness test and S_D) and the trend counts at a
+periods (robust S and its sameness test, and S_D with `similarity = TRUE`)
+and the trend counts at a
 glance.
 
 ```{r}

@@ -21,8 +21,8 @@
 #' **First against last period.** With p-values, the first and last
 #' periods are also compared as two patterns, as [sppt()] would: the robust
 #' S index over units not empty in both, its sameness test at
-#' `sameness_tau`, and the degree of similarity \eqn{S_D} with the index of
-#' dissimilarity \eqn{D} on the units flagged at `alpha` in the last period.
+#' `sameness_tau`, and, with `similarity = TRUE`, the degree of similarity
+#' \eqn{S_D} (see [sppt_similarity()]).
 #' This summarises how far the pattern moved over the whole series; the
 #' trends describe how it got there. The sameness test is not reported with
 #' `fix_base = TRUE`.
@@ -45,6 +45,11 @@
 #'   which is used to label the time axis.
 #' @param sameness_tau Numeric in (0, 1). Significance level of the sameness
 #'   test for the first against the last period. Default `0.05`.
+#' @param similarity Logical. Compute the degree of similarity \eqn{S_D} for
+#'   the first against the last period (see [sppt_similarity()]). Default
+#'   `FALSE`, because it takes extra bootstraps.
+#' @param similarity_level Numeric in (0, 1). Probability that a retest of
+#'   the redistributed patterns gives \eqn{S \ge 1 - \alpha}. Default 0.95.
 #' @param prefix Character or `NULL`. Prefix for the output column names, so
 #'   that results for several crime types can sit in one object. `NULL`
 #'   (default) derives it from `count_col`, for example `"BNER_"`.
@@ -125,9 +130,9 @@
 #'     class of the base-period count, its bounds and label.}
 #' }
 #' The comparison of the first and last periods is stored as
-#' `attr(x, "first_last")`: the robust S index, its sameness test and the
-#' degree of similarity \eqn{S_D} with the index of dissimilarity \eqn{D}
-#' (see [sppt()] and [sppt_similarity()]).
+#' `attr(x, "first_last")`: the robust S index, its sameness test and, with
+#' `similarity = TRUE`, the degree of similarity \eqn{S_D} (see [sppt()]
+#' and [sppt_similarity()]).
 #' The S indices, Jenks breaks, trend tables and p-value matrix are stored as
 #' attributes (for example `attr(x, "s_index_overlap")`,
 #' `attr(x, "interval_table_linear")`, `attr(x, "pvalue_matrix")`). With
@@ -167,6 +172,8 @@ sppt_longitudinal <- function(data,
                               seed                = NULL,
                               alpha               = 0.05,
                               sameness_tau        = 0.05,
+                              similarity          = FALSE,
+                              similarity_level    = 0.95,
                               calculate_pvalues   = TRUE,
                               conf_level          = 0.85,
                               fix_base            = FALSE,
@@ -718,7 +725,10 @@ sppt_longitudinal <- function(data,
   # ---------------------------------------------------------------------------
   first_last <- if (calculate_pvalues)
     first_last_compare(C_mat[, 1L], C_mat[, T_], pvalue_matrix[, T_], alpha,
-                       sameness_tau, fix_base, count_col[1L], count_col[T_])
+                       sameness_tau, fix_base, count_col[1L], count_col[T_],
+                       similarity = isTRUE(similarity),
+                       similarity_level = similarity_level,
+                       B = B)
 
   # ---------------------------------------------------------------------------
   # Console report
@@ -1299,7 +1309,9 @@ print.sppt_long_result <- function(x, ...) {
 
 # First against last period, on the last column of the p-value matrix.
 first_last_compare <- function(cnt_first, cnt_last, p_last, alpha, tau,
-                               fix_base, name_first, name_last) {
+                               fix_base, name_first, name_last,
+                               similarity = FALSE, similarity_level = 0.95,
+                               B = 4999L) {
   cnt_first[is.na(cnt_first)] <- 0
   cnt_last[is.na(cnt_last)]   <- 0
   elig <- !(cnt_first == 0 & cnt_last == 0)
@@ -1313,7 +1325,11 @@ first_last_compare <- function(cnt_first, cnt_last, p_last, alpha, tau,
        n_down = sum(flag & cnt_last / sum(cnt_last) < cnt_first / sum(cnt_first)),
        sameness = if (!fix_base && n_el > 0)
          sppt_sameness(S, n_f, n_el, alpha, tau = tau),
-       similarity = similarity_d(cnt_first, cnt_last, flag))
+       similarity = if (similarity && n_el > 0 && sum(cnt_first) > 0 &&
+                        sum(cnt_last) > 0)
+         similarity_search(cnt_first, cnt_last, name_first, name_last,
+                           alpha = alpha, B = B, level = similarity_level,
+                           fix_base = fix_base))
 }
 
 first_last_lines <- function(fl, rule = TRUE) {
@@ -1328,7 +1344,7 @@ first_last_lines <- function(fl, rule = TRUE) {
                             fl$base_name)),
     field_lines("", sprintf("%d units %s > %s", fl$n_down, fl$base_name,
                             fl$test_name)),
-    similarity_lines(fl$similarity, fl$base_name, fl$test_name))
+    if (!is.null(fl$similarity)) similarity_lines(fl$similarity) else "")
   sm <- fl$sameness
   if (!is.null(sm) && !is.na(sm$p_value))
     out <- paste0(out, field_lines("Sameness", sprintf(

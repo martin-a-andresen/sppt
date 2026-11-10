@@ -12,6 +12,8 @@ sppt_longitudinal(
   seed = NULL,
   alpha = 0.05,
   sameness_tau = 0.05,
+  similarity = FALSE,
+  similarity_level = 0.95,
   calculate_pvalues = TRUE,
   conf_level = 0.85,
   fix_base = FALSE,
@@ -64,6 +66,13 @@ the analysis is at census tracts or an equally coarse scale
 
 \item{sameness_tau}{Numeric in (0, 1). Significance level of the sameness
 test for the first against the last period. Default \code{0.05}.}
+
+\item{similarity}{Logical. Compute the degree of similarity \eqn{S_D} for
+the first against the last period (see \code{\link[=sppt_similarity]{sppt_similarity()}}). Default
+\code{FALSE}, because it takes extra bootstraps.}
+
+\item{similarity_level}{Numeric in (0, 1). Probability that a retest of
+the redistributed patterns gives \eqn{S \ge 1 - \alpha}. Default 0.95.}
 
 \item{calculate_pvalues}{Logical. Compute bootstrap p-values. Default
 \code{TRUE}.}
@@ -178,9 +187,9 @@ fit and the sign of a significant quadratic term (quadratic only).}
 class of the base-period count, its bounds and label.}
 }
 The comparison of the first and last periods is stored as
-\code{attr(x, "first_last")}: the robust S index, its sameness test and the
-degree of similarity \eqn{S_D} with the index of dissimilarity \eqn{D}
-(see \code{\link[=sppt]{sppt()}} and \code{\link[=sppt_similarity]{sppt_similarity()}}).
+\code{attr(x, "first_last")}: the robust S index, its sameness test and, with
+\code{similarity = TRUE}, the degree of similarity \eqn{S_D} (see \code{\link[=sppt]{sppt()}}
+and \code{\link[=sppt_similarity]{sppt_similarity()}}).
 The S indices, Jenks breaks, trend tables and p-value matrix are stored as
 attributes (for example \code{attr(x, "s_index_overlap")},
 \code{attr(x, "interval_table_linear")}, \code{attr(x, "pvalue_matrix")}). With
@@ -217,8 +226,8 @@ at least one significant period.
 \strong{First against last period.} With p-values, the first and last
 periods are also compared as two patterns, as \code{\link[=sppt]{sppt()}} would: the robust
 S index over units not empty in both, its sameness test at
-\code{sameness_tau}, and the degree of similarity \eqn{S_D} with the index of
-dissimilarity \eqn{D} on the units flagged at \code{alpha} in the last period.
+\code{sameness_tau}, and, with \code{similarity = TRUE}, the degree of similarity
+\eqn{S_D} (see \code{\link[=sppt_similarity]{sppt_similarity()}}).
 This summarises how far the pattern moved over the whole series; the
 trends describe how it got there. The sameness test is not reported with
 \code{fix_base = TRUE}.

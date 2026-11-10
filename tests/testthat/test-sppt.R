@@ -155,57 +155,91 @@ test_that("console output fits in 70 columns", {
                                                      seed = 1)))), 70)
 })
 
-test_that("S_D and D follow their definitions", {
+test_that("S_D is off by default and does not change the rest", {
+  res0 <- sppt(vancouver_ct, group_col = "id",
+               count_col = c("BNER2021", "BNEC2021"), B = 999, seed = 1,
+               verbose = FALSE, create_maps = FALSE)
+  expect_null(attr(res0, "sppt_summary")$similarity)
+  expect_false(any(grepl("S_D", capture.output(summary(res0)))))
+  res1 <- sppt(vancouver_ct, group_col = "id",
+               count_col = c("BNER2021", "BNEC2021"), B = 999, seed = 1,
+               similarity = TRUE, verbose = FALSE, create_maps = FALSE)
+  strip <- function(x) { x <- sf::st_drop_geometry(x)
+    attributes(x)[c("sppt_summary", "sppt_maps")] <- NULL; x }
+  expect_equal(strip(res0), strip(res1))
+  expect_equal(attr(res0, "sppt_summary")$arrangement,
+               attr(res1, "sppt_summary")$arrangement)
+  expect_output(summary(res1), "S_D")
+  expect_output(summary(res1), "Redistribution")
+  expect_error(sppt(vancouver_ct, group_col = "id",
+                    count_col = c("BNER2021", "BNEC2021"),
+                    similarity = "yes"), "TRUE or FALSE")
+})
+
+test_that("S_D follows its definition and a retest passes", {
   res <- sppt(vancouver_ct, group_col = "id",
-              count_col = c("BNER2021", "BNEC2021"), B = 199, seed = 1,
-              verbose = FALSE, create_maps = FALSE, arrangement = FALSE)
+              count_col = c("BNER2021", "BNEC2021"), B = 999, seed = 1,
+              similarity = TRUE, verbose = FALSE, create_maps = FALSE,
+              arrangement = FALSE)
   x <- sppt_similarity(res)
   a <- vancouver_ct$BNER2021 / sum(vancouver_ct$BNER2021)
   b <- vancouver_ct$BNEC2021 / sum(vancouver_ct$BNEC2021)
-  flag <- res$sig_pvalue == 1L & !is.na(res$sig_pvalue)
-  # D does not depend on the bootstrap
-  expect_equal(round(x$dissimilarity_d, 5), 0.48485)
-  expect_equal(x$s_index_d, 1 - 0.5 * sum(abs(b - a)[flag]))
-  expect_gte(x$s_index_d, 1 - x$dissimilarity_d)
-  expect_equal(x$share_d_flagged, (1 - x$s_index_d) / x$dissimilarity_d)
-  # Flagged share differences by direction; the share to move is the larger
-  d <- b - a
-  expect_equal(x$flagged_test_higher, sum(d[flag & d > 0]))
-  expect_equal(x$flagged_base_higher, -sum(d[flag & d < 0]))
-  expect_equal(1 - x$s_index_d,
-               (x$flagged_test_higher + x$flagged_base_higher) / 2)
-  expect_equal(x$share_to_move, max(x$flagged_test_higher,
-                                    x$flagged_base_higher))
-  expect_gte(x$share_to_move, 1 - x$s_index_d)
-  expect_equal(x$events_to_move_base,
-               x$share_to_move * sum(vancouver_ct$BNER2021))
-  # Every unit flagged: the two directions balance and the share to move is D
-  all_f <- sppt:::similarity_d(vancouver_ct$BNER2021, vancouver_ct$BNEC2021,
-                               rep(TRUE, 127))
-  expect_equal(all_f$share_to_move, all_f$dissimilarity_d)
-  expect_equal(all_f$s_index_d, 1 - all_f$dissimilarity_d)
-  # Symmetric in base and test for the same flags
-  sw <- sppt:::similarity_d(vancouver_ct$BNEC2021, vancouver_ct$BNER2021, flag)
-  expect_equal(sw$s_index_d, x$s_index_d)
-  # Stored in the summary, printed by sppt() and summary()
-  expect_equal(attr(res, "sppt_summary")$similarity$s_index_d, x$s_index_d)
-  expect_output(summary(res), "S_D")
-  # Identical patterns give D = 0 and S_D = 1
-  same <- sppt:::similarity_d(1:5, 2 * (1:5), rep(TRUE, 5))
-  expect_equal(same$dissimilarity_d, 0)
-  expect_equal(same$s_index_d, 1)
-  expect_true(is.na(same$share_d_flagged))
+  expect_equal(x$moved, c("BNER2021", "BNEC2021"))
+  expect_equal(attr(x, "s_index_d"), 1 - min(x$share))
+  expect_equal(x$events, x$share * c(sum(vancouver_ct$BNER2021),
+                                     sum(vancouver_ct$BNEC2021)))
+  expect_true(all(x$margin >= 0.05) && all(x$p_retest >= 0.95))
+  sh <- attr(x, "shares")
+  expect_equal(sum(sh$BNER2021), 1)
+  expect_equal(sum(sh$BNEC2021), 1)
+  expect_equal(0.5 * sum(abs(sh$BNER2021 - a)), x$share[1])
+  expect_equal(0.5 * sum(abs(sh$BNEC2021 - b)), x$share[2])
+  # Direct retests of the redistributed patterns: S >= 0.95 in nearly all
+  act <- (vancouver_ct$BNER2021 + vancouver_ct$BNEC2021) > 0
+  retest <- function(pa, pb, seed, B = 999) {
+    set.seed(seed)
+    n <- length(pa)
+    d <- matrix(stats::rmultinom(B, 2085, pb), n) / 2085 -
+      matrix(stats::rmultinom(B, 1489, pa), n) / 1489
+    p <- (1 + rowSums(abs(d - rowMeans(d)) >= abs(pb - pa) - 1e-12)) / (B + 1)
+    1 - sum(act & p <= 0.05) / sum(act)
+  }
+  s_base <- vapply(1:20, function(k) retest(sh$BNER2021, b, 100 + k), 1)
+  s_test <- vapply(1:20, function(k) retest(a, sh$BNEC2021, 200 + k), 1)
+  expect_gte(mean(s_base >= 0.95), 0.85)
+  expect_gte(mean(s_test >= 0.95), 0.85)
+  # Computed afterwards from a result without it, reproducibly with a seed
+  res0 <- sppt(vancouver_ct, group_col = "id",
+               count_col = c("BNER2021", "BNEC2021"), B = 999, seed = 1,
+               verbose = FALSE, create_maps = FALSE, arrangement = FALSE)
+  y1 <- sppt_similarity(res0, seed = 5)
+  y2 <- sppt_similarity(res0, seed = 5)
+  expect_equal(y1, y2)
+  expect_equal(attr(y1, "s_index_d"), attr(x, "s_index_d"), tolerance = 0.02)
 })
 
-test_that("the S_D note appears when flagged units hold little of D", {
-  out <- capture.output(suppressWarnings(sppt(
-    vancouver_da, group_col = "id", count_col = c("BNER2021", "BNEC2021"),
-    B = 4999, seed = 20261108L, create_maps = FALSE, arrangement = FALSE)))
-  expect_true(any(grepl("overstates similarity", out)))
-  out_ct <- capture.output(sppt(
-    vancouver_ct, group_col = "id", count_col = c("BNER2021", "BNEC2021"),
-    B = 4999, seed = 20261108L, create_maps = FALSE, arrangement = FALSE))
-  expect_false(any(grepl("overstates similarity", out_ct)))
+test_that("S_D is 1 when nothing has to move", {
+  cnt <- c(40, 60, 80, 100, 120)
+  sim <- sppt:::similarity_search(cnt, 2 * cnt, "a", "b", alpha = 0.05,
+                                  B = 999, seed = 1)
+  expect_equal(sim$s_index_d, 1)
+  expect_equal(sim$directions$share, c(0, 0))
+})
+
+test_that("S_D against a random distribution moves the observed pattern", {
+  res <- sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
+              B = 999, seed = 1, similarity = TRUE, verbose = FALSE,
+              create_maps = FALSE, arrangement = FALSE)
+  x <- sppt_similarity(res)
+  expect_equal(nrow(x), 1L)
+  expect_equal(x$moved, "BNER2021")
+  expect_equal(attr(x, "s_index_d"), 1 - x$share)
+  # Under a correction S_D uses the uncorrected B
+  rb <- sppt(vancouver_ct, group_col = "id",
+             count_col = c("BNER2021", "BNEC2021"), seed = 1,
+             correction = "bonferroni", similarity = TRUE, verbose = FALSE,
+             create_maps = FALSE, arrangement = FALSE)
+  expect_equal(attr(rb, "sppt_summary")$similarity$B, 4999)
 })
 
 test_that("a single column is tested against a random distribution", {
