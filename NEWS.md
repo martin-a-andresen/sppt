@@ -24,16 +24,17 @@
   and a new tier map is available as `sppt_map(res, "tiers")`.
 * `sppt()` notes a widespread shift (most flagged units share one direction
   and lie outside any cluster) and adds it to the two-way verdict.
-* `sppt()` reports a degree of similarity, S_D: one minus half the sum of
-  absolute differences in shares over the flagged units, alongside the index
-  of dissimilarity D (Duncan and Duncan 1955), the share of D held by
-  flagged units, the flagged share differences in each direction, and the
-  share and number of events of each pattern that would have to move to
-  remove the flagged differences (the larger of the two directions, which
-  1 - S_D approximates from below). A note is printed when flagged units
-  hold less than 60% of D. S tests
-  sameness; S_D measures how similar two patterns are. New
-  `sppt_similarity()` returns these values from a result.
+* New degree of similarity, S_D: one minus the smallest share of events
+  that would have to be redistributed within one pattern for a retest of
+  the two patterns to give S >= 1 - alpha with probability 0.95. It is
+  found for both directions (moving the base, and moving the test) and
+  S_D uses the smaller; the report gives the share and number of events for
+  both. Units are moved inside their bootstrap intervals with a margin,
+  the intervals are recomputed at the moved shares, the retest probability
+  follows from each unit's binomial chance of being flagged, and the
+  margin is found by bisection. It takes extra bootstraps, so it is off by
+  default: `sppt(similarity = TRUE)`, or `sppt_similarity()` on an existing
+  result. S tests sameness; S_D measures how similar two patterns are.
 * `sppt()` tests a single pattern against a random distribution:
   `count_col = "BNER2021"` or `c("random", "BNER2021")` compares the column
   with random allocations of its own total to the units, in proportion to
@@ -42,11 +43,11 @@
   gives equal probability per unit; naming a numeric column uses it as the
   exposure.
   The test is a Monte Carlo test against the random envelope, and all the
-  usual output follows (S and sameness, S_D and D, arrangement, tiers, maps).
+  usual output follows (S and sameness, S_D, arrangement, tiers, maps).
 * `sppt_longitudinal()` compares the first and last periods as two
   patterns: robust S with its sameness test (new argument `sameness_tau`),
-  and S_D with D, printed in the report and `summary()` and stored as
-  `attr(x, "first_last")`.
+  and, with `similarity = TRUE`, S_D, printed in the report and `summary()`
+  and stored as `attr(x, "first_last")`.
 * New `sppt_clusters()` tests clusters of flagged units against the
   clusters that false positives alone produce on the same map, under the
   one-gap or contiguous rule. Clusters are built within each direction of

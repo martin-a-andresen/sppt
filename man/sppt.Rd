@@ -21,6 +21,8 @@ sppt(
   fix_base = FALSE,
   random_by = "exposure",
   use_percentages = TRUE,
+  similarity = FALSE,
+  similarity_level = 0.95,
   verbose = TRUE,
   create_maps = TRUE,
   map_crs = NULL,
@@ -99,6 +101,13 @@ non-negative numeric column in \code{data} to use as the exposure.}
 \item{use_percentages}{Logical. Express proportions as percentages
 (0-100) rather than as proportions (0-1). Default \code{TRUE}.}
 
+\item{similarity}{Logical. Compute the degree of similarity \eqn{S_D}
+(see Details and \code{\link[=sppt_similarity]{sppt_similarity()}}). Default \code{FALSE}, because it takes
+extra bootstraps.}
+
+\item{similarity_level}{Numeric in (0, 1). Probability that a retest of
+the redistributed patterns gives \eqn{S \ge 1 - \alpha}. Default 0.95.}
+
 \item{verbose}{Logical. Print the test summary to the console. Default
 \code{TRUE}.}
 
@@ -156,8 +165,8 @@ confidence bounds for base and test (CI only).}
 not (CI only).}
 \item{\code{sig_ci_dir}}{Direction of CI-based differences (CI only).}
 }
-The attribute \code{"sppt_summary"} holds the robust S index, \eqn{S_D} and
-the dissimilarity index (element \code{similarity}), the sameness and
+The attribute \code{"sppt_summary"} holds the robust S index, \eqn{S_D} with
+\code{similarity = TRUE} (element \code{similarity}), the sameness and
 arrangement tests, the tier counts and the settings; \code{summary()} prints
 it. The attribute \code{"sppt_maps"} holds the maps as a named list of
 \code{ggplot} objects (\code{difference}, \code{pvalue}, \code{tiers} with the arrangement
@@ -215,37 +224,24 @@ much as the observed pattern does, \eqn{p = (1 + r)/(B + 1)}. Every unit
 with any exposure is eligible, including units with no events, which are
 informative here. Everything else is reported as usual: the S index and
 its sameness test (now: no more different than a random allocation),
-\eqn{S_D} and \eqn{D} (here \eqn{D} measures how concentrated the pattern
-is relative to its exposure, a Hoover-type index of concentration), the
-arrangement test, tiers and maps.
+\eqn{S_D} with \code{similarity = TRUE} (only the observed pattern is moved),
+the arrangement test, tiers and maps.
 The expected counts of the random pattern are added as column \code{random}.
 Confidence intervals and \code{fix_base} do not apply.
 
 \strong{Sameness and degree of similarity.} The S index tests sameness: two
 realisations of one process give \eqn{S \approx 1 - \alpha}, and the
 sameness test asks whether S is lower than that. It does not measure how
-similar two patterns are. For that, \code{sppt()} also reports
-\deqn{S_D = 1 - \frac{1}{2}\sum_{i \in F} |p_{bi} - p_{ai}|,}{S_D = 1 -
-1/2 * sum over flagged units of |p_bi - p_ai|,}
-where \eqn{p_{ai}} and \eqn{p_{bi}} are unit \eqn{i}'s shares of all
-events in the base and test patterns (as proportions) and \eqn{F} is the
-set of units flagged at \code{alpha}. Summed over all units, half the absolute
-difference in shares is the index of dissimilarity, \eqn{D} (Duncan and
-Duncan 1955), the share of either pattern that would have to move to other
-units to reproduce the other pattern (Hoover 1936). \eqn{S_D} limits that
-sum to the units the test flags. It lies in [0, 1], is symmetric in
-base and test, and is at least \eqn{1 - D}. Over the flagged units the
-shares where each pattern is higher need not balance, so \eqn{1 - S_D}
-approximates, and never exceeds, the share of either pattern that would
-have to move to remove the flagged differences: the larger of the two
-flagged totals. The report prints both totals and the events to move
-(that larger total times each pattern's total). Where power is limited, many
-genuine differences go unflagged and \eqn{S_D} overstates similarity; the
-share of \eqn{D} held by flagged units, \eqn{(1 - S_D)/D}, shows how much
-of the total dissimilarity the flags capture, and a note is printed when
-it is below 0.6, a judgement call rather than a calibrated threshold.
-\eqn{S_D} always uses the uncorrected flags, \eqn{p \le \alpha}. See
-\code{\link[=sppt_similarity]{sppt_similarity()}}.
+similar two patterns are. With \code{similarity = TRUE}, \code{sppt()} also reports
+the degree of similarity \eqn{S_D}: one minus the smallest share of
+events that would have to be redistributed within one pattern for a
+retest of the two patterns to give \eqn{S \ge 1 - \alpha} with
+probability \code{similarity_level}. It is computed moving each pattern in
+turn, and \eqn{S_D} uses the smaller share; the report gives the share
+and number of events for both. It takes extra bootstraps (seconds for a
+hundred units, minutes for a thousand), so it is off by default, and it
+can also be computed afterwards with \code{\link[=sppt_similarity]{sppt_similarity()}}, which describes
+the method. It uses the uncorrected flags, \eqn{p \le \alpha}.
 
 \strong{Multiple testing.} No correction is applied by default. Simulation
 evidence shows that corrections remove much of the power at fine spatial
@@ -336,13 +332,6 @@ Andresen, M.A. (2026). Testing longitudinal change in spatial
 distributions and patterns: An extension of the spatial point pattern
 test. \emph{Annals of the American Association of Geographers}, in press.
 \doi{10.1080/24694452.2026.2733304}
-
-Duncan, O.D. and Duncan, B. (1955). A methodological analysis of
-segregation indexes. \emph{American Sociological Review}, 20, 210-217.
-\doi{10.2307/2088328}
-
-Hoover, E.M. (1936). The measurement of industrial localization. \emph{The
-Review of Economic Statistics}, 18, 162-171.
 }
 \seealso{
 \code{\link[=sppt_longitudinal]{sppt_longitudinal()}}, \code{\link[=sppt_sameness]{sppt_sameness()}}, \code{\link[=sppt_similarity]{sppt_similarity()}},

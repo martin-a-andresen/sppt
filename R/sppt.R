@@ -50,37 +50,24 @@
 #' with any exposure is eligible, including units with no events, which are
 #' informative here. Everything else is reported as usual: the S index and
 #' its sameness test (now: no more different than a random allocation),
-#' \eqn{S_D} and \eqn{D} (here \eqn{D} measures how concentrated the pattern
-#' is relative to its exposure, a Hoover-type index of concentration), the
-#' arrangement test, tiers and maps.
+#' \eqn{S_D} with `similarity = TRUE` (only the observed pattern is moved),
+#' the arrangement test, tiers and maps.
 #' The expected counts of the random pattern are added as column `random`.
 #' Confidence intervals and `fix_base` do not apply.
 #'
 #' **Sameness and degree of similarity.** The S index tests sameness: two
 #' realisations of one process give \eqn{S \approx 1 - \alpha}, and the
 #' sameness test asks whether S is lower than that. It does not measure how
-#' similar two patterns are. For that, `sppt()` also reports
-#' \deqn{S_D = 1 - \frac{1}{2}\sum_{i \in F} |p_{bi} - p_{ai}|,}{S_D = 1 -
-#' 1/2 * sum over flagged units of |p_bi - p_ai|,}
-#' where \eqn{p_{ai}} and \eqn{p_{bi}} are unit \eqn{i}'s shares of all
-#' events in the base and test patterns (as proportions) and \eqn{F} is the
-#' set of units flagged at `alpha`. Summed over all units, half the absolute
-#' difference in shares is the index of dissimilarity, \eqn{D} (Duncan and
-#' Duncan 1955), the share of either pattern that would have to move to other
-#' units to reproduce the other pattern (Hoover 1936). \eqn{S_D} limits that
-#' sum to the units the test flags. It lies in \[0, 1\], is symmetric in
-#' base and test, and is at least \eqn{1 - D}. Over the flagged units the
-#' shares where each pattern is higher need not balance, so \eqn{1 - S_D}
-#' approximates, and never exceeds, the share of either pattern that would
-#' have to move to remove the flagged differences: the larger of the two
-#' flagged totals. The report prints both totals and the events to move
-#' (that larger total times each pattern's total). Where power is limited, many
-#' genuine differences go unflagged and \eqn{S_D} overstates similarity; the
-#' share of \eqn{D} held by flagged units, \eqn{(1 - S_D)/D}, shows how much
-#' of the total dissimilarity the flags capture, and a note is printed when
-#' it is below 0.6, a judgement call rather than a calibrated threshold.
-#' \eqn{S_D} always uses the uncorrected flags, \eqn{p \le \alpha}. See
-#' [sppt_similarity()].
+#' similar two patterns are. With `similarity = TRUE`, `sppt()` also reports
+#' the degree of similarity \eqn{S_D}: one minus the smallest share of
+#' events that would have to be redistributed within one pattern for a
+#' retest of the two patterns to give \eqn{S \ge 1 - \alpha} with
+#' probability `similarity_level`. It is computed moving each pattern in
+#' turn, and \eqn{S_D} uses the smaller share; the report gives the share
+#' and number of events for both. It takes extra bootstraps (seconds for a
+#' hundred units, minutes for a thousand), so it is off by default, and it
+#' can also be computed afterwards with [sppt_similarity()], which describes
+#' the method. It uses the uncorrected flags, \eqn{p \le \alpha}.
 #'
 #' **Multiple testing.** No correction is applied by default. Simulation
 #' evidence shows that corrections remove much of the power at fine spatial
@@ -197,6 +184,11 @@
 #'   non-negative numeric column in `data` to use as the exposure.
 #' @param use_percentages Logical. Express proportions as percentages
 #'   (0-100) rather than as proportions (0-1). Default `TRUE`.
+#' @param similarity Logical. Compute the degree of similarity \eqn{S_D}
+#'   (see Details and [sppt_similarity()]). Default `FALSE`, because it takes
+#'   extra bootstraps.
+#' @param similarity_level Numeric in (0, 1). Probability that a retest of
+#'   the redistributed patterns gives \eqn{S \ge 1 - \alpha}. Default 0.95.
 #' @param verbose Logical. Print the test summary to the console. Default
 #'   `TRUE`.
 #' @param create_maps Logical. Build the maps and print them. The maps are
@@ -245,8 +237,8 @@
 #'     not (CI only).}
 #'   \item{`sig_ci_dir`}{Direction of CI-based differences (CI only).}
 #' }
-#' The attribute `"sppt_summary"` holds the robust S index, \eqn{S_D} and
-#' the dissimilarity index (element `similarity`), the sameness and
+#' The attribute `"sppt_summary"` holds the robust S index, \eqn{S_D} with
+#' `similarity = TRUE` (element `similarity`), the sameness and
 #' arrangement tests, the tier counts and the settings; `summary()` prints
 #' it. The attribute `"sppt_maps"` holds the maps as a named list of
 #' `ggplot` objects (`difference`, `pvalue`, `tiers` with the arrangement
@@ -266,13 +258,6 @@
 #' distributions and patterns: An extension of the spatial point pattern
 #' test. *Annals of the American Association of Geographers*, in press.
 #' \doi{10.1080/24694452.2026.2733304}
-#'
-#' Duncan, O.D. and Duncan, B. (1955). A methodological analysis of
-#' segregation indexes. *American Sociological Review*, 20, 210-217.
-#' \doi{10.2307/2088328}
-#'
-#' Hoover, E.M. (1936). The measurement of industrial localization. *The
-#' Review of Economic Statistics*, 18, 162-171.
 #'
 #' @seealso [sppt_longitudinal()], [sppt_sameness()], [sppt_similarity()],
 #'   [sppt_clusters()],
@@ -302,6 +287,8 @@ sppt <- function(data,
                  fix_base           = FALSE,
                  random_by          = "exposure",
                  use_percentages    = TRUE,
+                 similarity         = FALSE,
+                 similarity_level   = 0.95,
                  verbose            = TRUE,
                  create_maps        = TRUE,
                  map_crs            = NULL,
@@ -371,6 +358,12 @@ sppt <- function(data,
     stop("`correction` must be one of: ",
          paste(valid_corrections, collapse = ", "), ".", call. = FALSE)
 
+  if (!is.logical(similarity) || length(similarity) != 1L || is.na(similarity))
+    stop("`similarity` must be TRUE or FALSE.", call. = FALSE)
+  want_similarity <- similarity
+  if (!is.numeric(similarity_level) || length(similarity_level) != 1L ||
+      similarity_level <= 0 || similarity_level >= 1)
+    stop("`similarity_level` must be a number in (0, 1).", call. = FALSE)
   if (!is.numeric(alpha) || length(alpha) != 1L || alpha <= 0 || alpha >= 1)
     stop("`alpha` must be a single numeric value in (0, 1).", call. = FALSE)
 
@@ -668,11 +661,25 @@ sppt <- function(data,
     s_index_ci <- 1 - n_sig_ci / n_eligible
   }
 
-  # Degree of similarity, S_D, on the uncorrected flags (see Details)
-  similarity <- NULL
-  if (calculate_pvalues && valid_bootstrap && n_eligible > 0L)
-    similarity <- similarity_d(counts_a, counts_b,
-                               active & pvalue <= alpha)
+  # Degree of similarity, S_D, on the uncorrected flags (see Details). The
+  # search restores the random-number state, so nothing else changes.
+  if (want_similarity) {
+    if (calculate_pvalues && valid_bootstrap && n_eligible > 0L) {
+      similarity <- similarity_search(
+        counts_a, counts_b, base_name = base_name, test_name = test_name,
+        alpha = alpha,
+        B = if (correction == "none") B else
+          choose_B(alpha, n_eligible, "none")$B,
+        level = similarity_level, fix_base = fix_base,
+        random_side = if (random_mode) (if (is_rand[1L]) "base" else "test"))
+    } else {
+      similarity <- NULL
+      warning("S_D needs p-values from a valid bootstrap; not computed.",
+              call. = FALSE)
+    }
+  } else {
+    similarity <- NULL
+  }
 
   # -- 10. Spatial arrangement and confidence tiers ---------------------------
   # Under sameness the per-unit p-values are uniform, so the signed surface
@@ -755,7 +762,7 @@ sppt <- function(data,
                                 base_name, test_name)))
   }
   if (!is.null(similarity))
-    say(similarity_lines(similarity, base_name, test_name, correction))
+    say(similarity_lines(similarity))
 
   if (!is.null(sameness) && !is.na(sameness$p_value)) {
     say(field_lines("Sameness", sprintf(
@@ -1167,8 +1174,7 @@ summary.sppt_result <- function(object, ...) {
     cat(field_lines("Robust S", sprintf("%.4f (alpha = %.3f; %d differ)",
                                         s$s_index_pv, s$alpha, s$n_sig_pv)))
   if (!is.null(s$similarity))
-    cat(similarity_lines(s$similarity, s$base_name, s$test_name,
-                         if (is.null(s$correction)) "none" else s$correction))
+    cat(similarity_lines(s$similarity))
   if (!is.null(s$sameness) && !is.na(s$sameness$p_value))
     cat(field_lines("Sameness", sprintf(
       "p %s (%s); S >= %.4f needed at tau = %.2f [%s]",

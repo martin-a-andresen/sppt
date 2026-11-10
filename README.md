@@ -12,8 +12,9 @@ such as crimes counted by census tract.
   it against a random distribution.
 * `sppt_clusters()` tests whether clusters of flagged units are larger than
   false positives alone would produce.
-* `sppt_similarity()` returns the degree of similarity S_D and the index of
-  dissimilarity D.
+* `sppt_similarity()` returns the degree of similarity S_D: the smallest
+  share of events that would have to move for the patterns to test as the
+  same.
 * `sppt_longitudinal()` compares every period of a time series with the
   first and classifies each unit's trajectory.
 * `sppt_sameness()` tests an S index against sameness.

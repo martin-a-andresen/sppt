@@ -83,8 +83,17 @@ test_that("first against last matches sppt() on the same two periods", {
   d <- sppt(vancouver_ct, group_col = "id",
             count_col = c("BNER2003", "BNER2006"), B = 199, seed = 1,
             verbose = FALSE, create_maps = FALSE, arrangement = FALSE)
-  expect_equal(fl$similarity$dissimilarity_d,
-               attr(d, "sppt_summary")$similarity$dissimilarity_d)
+  expect_equal(fl$n_eligible, attr(d, "sppt_summary")$n_eligible)
+  expect_null(fl$similarity)
+  r2 <- sppt_longitudinal(vancouver_ct, group_col = "id",
+                          count_col = paste0("BNER", 2003:2006),
+                          B = 199, seed = 1, verbose = FALSE,
+                          create_maps = FALSE, create_time_plot = FALSE,
+                          similarity = TRUE)
+  sim <- attr(r2, "first_last")$similarity
+  expect_equal(sim$directions$moved, c("BNER2003", "BNER2006"))
+  expect_equal(sim$s_index_d, 1 - min(sim$directions$share))
+  expect_output(summary(r2), "S_D")
   expect_false(is.null(fl$sameness))
   expect_output(summary(res), "against BNER2006")
 })

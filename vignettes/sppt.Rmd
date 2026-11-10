@@ -51,9 +51,9 @@ The console report gives:
   share of events did not change significantly;
 * the **sameness test**, which asks whether that S index is lower than two
   realisations of one process would give;
-* **S_D**, the degree of similarity: the share of each pattern already in
-  place once only the flagged units are allowed to differ, with the index of
-  dissimilarity D and the number of events that would have to move;
+* with `similarity = TRUE`, **S_D**, the degree of similarity: one minus the
+  smallest share of events that would have to move for a retest to find the
+  patterns the same, with the number of events for each pattern;
 * the **arrangement test**, Moran's I on the signed evidence surface, which
   asks whether the differences cluster in space;
 * the **confidence tiers** of the flagged units (core, edge, outside);
@@ -83,19 +83,24 @@ smaller `alpha` or under a correction.
 
 S tests sameness: is S lower than the 1 - alpha that two realisations of one
 process give? It does not say how far apart two different patterns are. S_D
-does, in events: `sppt_similarity()` returns it with the index of
-dissimilarity D.
+does, in events. It is one minus the smallest share of events that would
+have to be redistributed within one pattern for a retest of the two patterns
+to give S >= 1 - alpha with probability 0.95. Each unit is moved inside its
+bootstrap interval with enough margin that a retest does not flag it again,
+the intervals are recomputed at the moved shares, and the margin is the
+smallest that gives that probability. Moving a pattern changes its own
+sampling variance, so the two directions differ; S_D uses the smaller.
+
+It takes extra bootstraps, so it is off by default. Run `sppt()` with
+`similarity = TRUE`, or compute it afterwards:
 
 ```{r similarity}
-sppt_similarity(res)
+sppt_similarity(res, seed = 1)
 ```
 
-Where power is limited many real differences are not flagged and S_D
-overstates similarity, so `share_d_flagged` reports how much of D the flagged
-units hold. Over the flagged units the shares where each pattern is higher
-need not balance, so `share_to_move`, the larger of `flagged_test_higher` and
-`flagged_base_higher`, is the exact share that would have to move; 1 - S_D
-approximates it from below.
+The share depends on power: with few events per unit the intervals are wide
+and less has to move, so S_D at a fine scale is not comparable with S_D at a
+coarse one.
 
 ## Testing against a random distribution
 
@@ -109,12 +114,13 @@ uses it as the exposure.
 ```{r random}
 res_r <- sppt(vancouver_ct, group_col = "id", count_col = "BNER2021",
               B = 999, seed = 42, verbose = FALSE, create_maps = FALSE)
-sppt_similarity(res_r)
+table(res_r$sig_pvalue_dir, useNA = "ifany")
 ```
 
 Positive differences mark tracts with more residential burglary than a random
-allocation in proportion to area would give. Here D measures how concentrated
-burglary is relative to land area, a Hoover-type index of concentration.
+allocation in proportion to area would give. With `similarity = TRUE`, S_D
+gives the share of burglaries that would have to move for the pattern to be
+indistinguishable from that random allocation.
 
 ## Reading the map at fine scales
 
