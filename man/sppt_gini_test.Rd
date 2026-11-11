@@ -78,13 +78,15 @@ Gao and Andresen (2025).
 \strong{Global.} The events are allocated at random to the units \code{R} times,
 by sampling units with replacement (a multinomial allocation of the
 observed total), and the generalised Gini is computed for each
-allocation. The expected value is their mean, and the observed Gini is
+allocation. The expected value is their median, as in the published
+code, and the observed Gini is
 significant when it lies outside the central \code{level} share of them. The
 marginal generalised Gini is the observed minus the expected value,
 \eqn{\Delta G' = G' - E(G')}. The same allocations give the marginal
 crime concentration of Chalfin, Kaplan and Cuellar (2021),
 \eqn{\Delta cc = E(cc) - cc}, where \eqn{cc} is the percentage of units
-holding 50 per cent of the events.
+holding 50 per cent of the events and \eqn{E(cc)} is again the median
+over the allocations.
 
 \strong{Local.} For each unit, the central \code{level} share of its counts across
 the allocations is its non-rejection envelope. Units above it hold more

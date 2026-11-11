@@ -295,13 +295,15 @@ concentration_weights <- function(data, random_by, n) {
 #' **Global.** The events are allocated at random to the units `R` times,
 #' by sampling units with replacement (a multinomial allocation of the
 #' observed total), and the generalised Gini is computed for each
-#' allocation. The expected value is their mean, and the observed Gini is
+#' allocation. The expected value is their median, as in the published
+#' code, and the observed Gini is
 #' significant when it lies outside the central `level` share of them. The
 #' marginal generalised Gini is the observed minus the expected value,
 #' \eqn{\Delta G' = G' - E(G')}. The same allocations give the marginal
 #' crime concentration of Chalfin, Kaplan and Cuellar (2021),
 #' \eqn{\Delta cc = E(cc) - cc}, where \eqn{cc} is the percentage of units
-#' holding 50 per cent of the events.
+#' holding 50 per cent of the events and \eqn{E(cc)} is again the median
+#' over the allocations.
 #'
 #' **Local.** For each unit, the central `level` share of its counts across
 #' the allocations is its non-rejection envelope. Units above it hold more
@@ -391,12 +393,12 @@ sppt_gini_test <- function(data, count_col = NULL, random_by = "exposure",
     out[[paste0(nm, "_local")]] <- loc
     rows[[nm]] <- data.frame(
       variable = nm, n_units = n, n_events = N, gini = g_obs,
-      expected = mean(g_sim), lower = q[1L], upper = q[2L],
-      marginal_gini = g_obs - mean(g_sim),
+      expected = stats::median(g_sim), lower = q[1L], upper = q[2L],
+      marginal_gini = g_obs - stats::median(g_sim),
       significant = g_obs > q[2L] || g_obs < q[1L],
       p_value = (1 + sum(g_sim >= g_obs - 1e-12)) / (R + 1),
-      pct_units_50 = cc_obs, pct_units_50_random = mean(cc_sim),
-      marginal_concentration = mean(cc_sim) - cc_obs,
+      pct_units_50 = cc_obs, pct_units_50_random = stats::median(cc_sim),
+      marginal_concentration = stats::median(cc_sim) - cc_obs,
       dissimilarity = mean(loc != 0L), concentration = mean(loc == 1L),
       dispersion = mean(loc == -1L))
   }

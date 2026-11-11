@@ -68,7 +68,7 @@ test_that("sppt_gini_test reproduces the published code with equal probability",
                       R = 200, seed = 221220, verbose = FALSE)
   t <- attr(g, "gini_test")
   expect_equal(t$gini, sppt_gini(x))
-  expect_equal(t$expected, mean(g_ref))
+  expect_equal(t$expected, stats::median(g_ref))
   expect_equal(c(t$lower, t$upper),
                unname(stats::quantile(g_ref, c(0.025, 0.975))))
   expect_equal(t$marginal_gini, t$gini - t$expected)
