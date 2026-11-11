@@ -12,6 +12,9 @@
 #'   share of events that would have to move for the patterns to test as the
 #'   same.
 #' * [sppt_map()] redraws the maps from either analysis with a chosen layout.
+#' * [sppt_concentration()], [sppt_gini()] and [sppt_lorenz()] measure crime
+#'   concentration; [sppt_gini_test()] and [sppt_envelope()] test it against
+#'   random allocation.
 #'
 #' @references
 #' Andresen, M.A. (2009). Testing for similarity in area-based spatial

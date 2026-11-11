@@ -20,6 +20,18 @@ such as crimes counted by census tract.
 * `sppt_sameness()` tests an S index against sameness.
 * `sppt_map()` redraws the maps from either analysis with a chosen layout.
 
+Crime concentration:
+
+* `sppt_concentration()` gives the Gini and generalised Gini coefficients
+  and the share of units holding 50 and 25 per cent of events (also in
+  generalised form); `sppt_gini()` and `sppt_lorenz()` give the Gini with a
+  bootstrap interval and the Lorenz curve.
+* `sppt_gini_test()` tests the generalised Gini against random allocation
+  (marginal Gini and marginal concentration) and maps the units driving the
+  result.
+* `sppt_envelope()` compares the sorted counts with the same ranks under
+  random allocation.
+
 ## Installation
 
 ```r
