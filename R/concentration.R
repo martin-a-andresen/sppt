@@ -33,7 +33,9 @@
 #'   Andresen (2025). (The lorenzgini default is `TRUE`.)
 #' @param conf.level Confidence level for a bootstrap interval, or `NA`
 #'   (default) for none.
-#' @param R Number of bootstrap replicates. Default 1000.
+#' @param R Number of bootstrap replicates. Default 1000. The BCa interval
+#'   needs more replicates than units, so `R` is raised (with a message) to
+#'   the next multiple of 1000 above the number of units when it is not.
 #' @param type Interval type passed to [boot::boot.ci()]. Default `"bca"`.
 #'
 #' @return The coefficient, or with `conf.level` a named vector `gini`,
@@ -63,6 +65,14 @@ sppt_gini <- function(x, generalized = TRUE, unbiased = FALSE,
   if (!length(x) || anyNA(x) || any(x < 0) || sum(x) <= 0) return(NA_real_)
   if (is.na(conf.level))
     return(gini_value(x, generalized, unbiased))
+  # The BCa interval estimates its adjustment by regression on the
+  # replicates, which needs more replicates than units.
+  if (identical(type, "bca") && R <= length(x)) {
+    R_new <- ceiling((length(x) + 1) / 1000) * 1000
+    message("BCa needs more replicates than units: R raised from ", R,
+            " to ", R_new, ".")
+    R <- R_new
+  }
   b <- boot::boot(x, function(v, i) gini_value(v[i], generalized, unbiased),
                   R = R)
   ci <- boot::boot.ci(b, conf = conf.level, type = type)

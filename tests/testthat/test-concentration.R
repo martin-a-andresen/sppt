@@ -32,6 +32,9 @@ test_that("sppt_gini agrees with independent formulas", {
   ci <- sppt_gini(rpois(300, 2), conf.level = 0.95, R = 499)
   expect_named(ci, c("gini", "lwr.ci", "upr.ci"))
   expect_true(ci[["lwr.ci"]] < ci[["gini"]] && ci[["gini"]] < ci[["upr.ci"]])
+  expect_message(ci2 <- sppt_gini(rpois(1200, 2), conf.level = 0.9, R = 999),
+                 "R raised from 999 to 2000")
+  expect_length(ci2, 3)
 })
 
 test_that("concentration metrics count the unit that crosses the line", {

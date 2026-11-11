@@ -25,7 +25,9 @@ Andresen (2025). (The lorenzgini default is \code{TRUE}.)}
 \item{conf.level}{Confidence level for a bootstrap interval, or \code{NA}
 (default) for none.}
 
-\item{R}{Number of bootstrap replicates. Default 1000.}
+\item{R}{Number of bootstrap replicates. Default 1000. The BCa interval
+needs more replicates than units, so \code{R} is raised (with a message) to
+the next multiple of 1000 above the number of units when it is not.}
 
 \item{type}{Interval type passed to \code{\link[boot:boot.ci]{boot::boot.ci()}}. Default \code{"bca"}.}
 }
