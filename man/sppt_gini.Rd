@@ -7,7 +7,7 @@
 sppt_gini(
   x,
   generalized = TRUE,
-  unbiased = FALSE,
+  unbiased = TRUE,
   conf.level = NA,
   R = 1000,
   type = "bca"
@@ -19,8 +19,10 @@ missing or negative, or if there are no events.}
 
 \item{generalized}{Logical. Generalised Gini? Default \code{TRUE}.}
 
-\item{unbiased}{Logical. Unbiased form? Default \code{FALSE}, as in Gao and
-Andresen (2025). (The lorenzgini default is \code{TRUE}.)}
+\item{unbiased}{Logical. Unbiased form, so that all events in one unit
+give exactly 1? Default \code{TRUE}, as in lorenzgini. Gao and Andresen
+(2025) used \code{FALSE}; the difference is a factor of \eqn{m/(m - 1)},
+small unless there are few units.}
 
 \item{conf.level}{Confidence level for a bootstrap interval, or \code{NA}
 (default) for none.}
@@ -58,11 +60,11 @@ resampling units with replacement (\code{\link[boot:boot]{boot::boot()}} and \co
 as in lorenzgini.
 }
 \examples{
-sppt_gini(c(10, 8, 2, rep(0, 7)), generalized = FALSE)  # 0.78
-sppt_gini(c(5, 2, 1, rep(0, 7)), generalized = FALSE)   # 0.80
-sppt_gini(c(5, 2, 1, rep(0, 7)))                        # 0.75
-sppt_gini(c(10, rep(0, 9)), generalized = FALSE)        # 0.90
-sppt_gini(c(10, rep(0, 9)), generalized = FALSE, unbiased = TRUE)  # 1
+sppt_gini(c(10, 8, 2, rep(0, 7)), generalized = FALSE, unbiased = FALSE) # 0.78
+sppt_gini(c(5, 2, 1, rep(0, 7)), generalized = FALSE, unbiased = FALSE)  # 0.80
+sppt_gini(c(5, 2, 1, rep(0, 7)), unbiased = FALSE)                       # 0.75
+sppt_gini(c(10, rep(0, 9)), generalized = FALSE, unbiased = FALSE)       # 0.90
+sppt_gini(c(10, rep(0, 9)), generalized = FALSE)                         # 1
 }
 \references{
 Bernasco, W. and Steenbeek, W. (2017). More places than crimes:

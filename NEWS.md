@@ -20,7 +20,8 @@
 
 * Crime concentration functions:
   * `sppt_gini()`: the Gini and generalised Gini coefficients (Bernasco and
-    Steenbeek 2017), optionally unbiased, with a bootstrap interval;
+    Steenbeek 2017), unbiased by default as in lorenzgini, with a bootstrap
+    interval;
     written from the formulas of the lorenzgini package, whose documented
     values it reproduces.
   * `sppt_lorenz()`: the Lorenz curve, with the constrained line of
@@ -33,11 +34,13 @@
     with the expected value, envelope, marginal generalised Gini, marginal
     crime concentration (Chalfin et al. 2021), and the local envelope with
     its dissimilarity, concentration and dispersion indices (Gao and
-    Andresen 2025). Random allocation is in proportion to exposure by
-    default, as in `sppt()`; `random_by = "units"` reproduces the published
-    method. Print and map methods.
+    Andresen 2025). Every unit has equal probability by default, as in the
+    paper; `random_by` can weight by area, length or a column such as
+    population. With `unbiased = FALSE` it reproduces the published code.
+    Print and map methods.
   * `sppt_envelope()`: the rank envelope, comparing the sorted counts with
-    the same ranks under random allocation. Print and plot methods.
+    the same ranks under random allocation in proportion to exposure, as in
+    `sppt()`. Print and plot methods.
 * `sppt()` assigns each flagged unit a confidence tier (`confidence_tier`):
   core (inside a local Moran cluster), edge (bordering a core unit with the
   same sign) or outside. Tier counts are printed and stored in the summary,

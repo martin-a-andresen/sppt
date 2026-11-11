@@ -1,10 +1,10 @@
 test_that("sppt_gini matches the lorenzgini documented values", {
-  expect_equal(sppt_gini(c(10, 8, 2, rep(0, 7)), FALSE), 0.78)
-  expect_equal(sppt_gini(c(10, 8, 2, rep(0, 7)), TRUE), 0.78)
-  expect_equal(sppt_gini(c(5, 2, 1, rep(0, 7)), FALSE), 0.80)
-  expect_equal(sppt_gini(c(5, 2, 1, rep(0, 7)), TRUE), 0.75)
-  expect_equal(sppt_gini(c(10, rep(0, 9)), FALSE), 0.90)
-  expect_equal(sppt_gini(c(10, rep(0, 99)), FALSE), 0.99)
+  expect_equal(sppt_gini(c(10, 8, 2, rep(0, 7)), FALSE, FALSE), 0.78)
+  expect_equal(sppt_gini(c(10, 8, 2, rep(0, 7)), TRUE, FALSE), 0.78)
+  expect_equal(sppt_gini(c(5, 2, 1, rep(0, 7)), FALSE, FALSE), 0.80)
+  expect_equal(sppt_gini(c(5, 2, 1, rep(0, 7)), TRUE, FALSE), 0.75)
+  expect_equal(sppt_gini(c(10, rep(0, 9)), FALSE, FALSE), 0.90)
+  expect_equal(sppt_gini(c(10, rep(0, 99)), FALSE, FALSE), 0.99)
   expect_equal(sppt_gini(c(10, rep(0, 9)), FALSE, unbiased = TRUE), 1)
   expect_equal(sppt_gini(c(10, rep(0, 99)), FALSE, unbiased = TRUE), 1)
   expect_true(is.na(sppt_gini(c(1, -1))))
@@ -25,8 +25,10 @@ test_that("sppt_gini agrees with independent formulas", {
   set.seed(1)
   for (x in list(vancouver_ct$BNER2021, rpois(400, 0.3),
                  rnbinom(200, mu = 3, size = 0.4))) {
-    expect_equal(sppt_gini(x, FALSE), gmd(x))
-    expect_equal(sppt_gini(x), eq3(x))
+    expect_equal(sppt_gini(x, FALSE, FALSE), gmd(x))
+    expect_equal(sppt_gini(x, unbiased = FALSE), eq3(x))
+    m <- min(length(x), sum(x))
+    expect_equal(sppt_gini(x), eq3(x) * m / (m - 1))
   }
   set.seed(2)
   ci <- sppt_gini(rpois(300, 2), conf.level = 0.95, R = 499)
@@ -61,13 +63,14 @@ test_that("sppt_gini_test reproduces the published code with equal probability",
   N <- sum(x); n <- length(x)
   set.seed(221220)
   g_ref <- replicate(200, sppt_gini(sort(stats::rmultinom(1, N, rep(1, n)),
-                                         decreasing = TRUE)))
+                                         decreasing = TRUE),
+                                    unbiased = FALSE))
   set.seed(221220)
   sims <- replicate(200, stats::rmultinom(1, N, rep(1, n)))[, 1, ]
-  g <- sppt_gini_test(vancouver_da, "BNER2021", random_by = "units",
+  g <- sppt_gini_test(vancouver_da, "BNER2021", unbiased = FALSE,
                       R = 200, seed = 221220, verbose = FALSE)
   t <- attr(g, "gini_test")
-  expect_equal(t$gini, sppt_gini(x))
+  expect_equal(t$gini, sppt_gini(x, unbiased = FALSE))
   expect_equal(t$expected, stats::median(g_ref))
   expect_equal(c(t$lower, t$upper),
                unname(stats::quantile(g_ref, c(0.025, 0.975))))
@@ -80,17 +83,21 @@ test_that("sppt_gini_test reproduces the published code with equal probability",
   expect_output(print(g), "Marginal Gini")
 })
 
-test_that("sppt_gini_test uses exposure by default and checks inputs", {
+test_that("sppt_gini_test uses units by default, exposure on request", {
+  g0 <- sppt_gini_test(vancouver_ct, "BNER2021", R = 99, seed = 1,
+                       verbose = FALSE)
+  expect_equal(g0$BNER2021_expected, rep(sum(vancouver_ct$BNER2021) / 127, 127))
+  expect_true(attr(g0, "gini_test_meta")$unbiased)
   g <- sppt_gini_test(vancouver_ct, c("BNER2021", "BNEC2021"), R = 99,
-                      seed = 1, verbose = FALSE)
+                      random_by = "exposure", seed = 1, verbose = FALSE)
   a <- as.numeric(sf::st_area(vancouver_ct))
   expect_equal(g$BNER2021_expected, sum(vancouver_ct$BNER2021) * a / sum(a))
   expect_equal(attr(g, "gini_test")$variable, c("BNER2021", "BNEC2021"))
   expect_true(grepl("area", attr(g, "gini_test_meta")$random))
   d <- sf::st_drop_geometry(vancouver_ct)
-  expect_error(sppt_gini_test(d, "BNER2021"), "needs an sf layer")
-  expect_silent(sppt_gini_test(d, "BNER2021", random_by = "units", R = 99,
-                               verbose = FALSE))
+  expect_error(sppt_gini_test(d, "BNER2021", random_by = "exposure"),
+               "needs an sf layer")
+  expect_silent(sppt_gini_test(d, "BNER2021", R = 99, verbose = FALSE))
   expect_error(sppt_gini_test(vancouver_ct, "BNER2021", R = 5), "at least 19")
   expect_error(sppt_gini_test(vancouver_ct, "BNER2021", level = 2), "level")
   pdf(NULL)

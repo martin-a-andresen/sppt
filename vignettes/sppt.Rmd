@@ -136,9 +136,10 @@ Concentration can arise by chance, above all when there are few events per
 unit. `sppt_gini_test()` compares the generalised Gini with random
 allocations of the same events, reports the marginal Gini (observed minus
 expected) and marks the units holding more or fewer events than random.
-`sppt_envelope()` makes the same comparison rank by rank. Both allocate in
-proportion to area by default; `random_by = "units"` gives every unit equal
-probability.
+`sppt_envelope()` makes the same comparison rank by rank. The Gini test gives
+every unit equal probability by default, since the Gini treats each unit as one
+place; the envelope allocates in proportion to area or length, as `sppt()` does.
+Either can use `random_by` to change that, for example to a population column.
 
 ```{r gini-test}
 g <- sppt_gini_test(vancouver_ct, "BNEC2021", R = 499, seed = 1)

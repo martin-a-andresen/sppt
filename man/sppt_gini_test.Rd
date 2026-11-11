@@ -9,10 +9,10 @@
 sppt_gini_test(
   data,
   count_col = NULL,
-  random_by = "exposure",
+  random_by = "units",
   R = 1000L,
   level = 0.95,
-  unbiased = FALSE,
+  unbiased = TRUE,
   seed = NULL,
   verbose = TRUE
 )
@@ -35,15 +35,17 @@ vector of counts (then \code{random_by} must be \code{"units"}).}
 
 \item{count_col}{Character. One or more count columns of \code{data}.}
 
-\item{random_by}{\code{"exposure"} (default), \code{"units"} or the name of a
-non-negative numeric column, as in \code{\link[=sppt]{sppt()}}.}
+\item{random_by}{\code{"units"} (default, equal probability), \code{"exposure"}
+(area for polygons, length for lines) or the name of a non-negative
+numeric column, as in \code{\link[=sppt]{sppt()}}.}
 
 \item{R}{Number of random allocations. Default 1000.}
 
 \item{level}{Width of the envelopes. Default 0.95 (2.5th and 97.5th
 percentiles).}
 
-\item{unbiased}{Logical. Unbiased generalised Gini? Default \code{FALSE}.}
+\item{unbiased}{Logical. Unbiased generalised Gini (see \code{\link[=sppt_gini]{sppt_gini()}})?
+Default \code{TRUE}; Gao and Andresen (2025) used \code{FALSE}.}
 
 \item{seed}{Optional random seed.}
 
@@ -95,13 +97,18 @@ share of all units outside their envelopes, and it splits into a
 concentration index (above) and a dispersion index (below).
 }
 \details{
-Gao and Andresen (2025) give every unit equal probability. Here the
-default, as in \code{\link[=sppt]{sppt()}}, is \code{random_by = "exposure"}: in proportion to
-area for polygons or length for lines such as street segments. Use
-\code{random_by = "units"} for the published method; with \code{R = 1000} and the
-seed of the published code, it reproduces that code's results. The
-indices use all units as the denominator, including units with no
-events and no expected events.
+As in Gao and Andresen (2025), every unit has equal probability by
+default (\code{random_by = "units"}), because the Gini measures inequality
+among units, each counted as one place. With \code{random_by = "exposure"}
+(area for polygons, length for lines) or an exposure column, the random
+benchmark itself carries the inequality of that exposure, and the
+marginal Gini becomes the concentration beyond what the exposure alone
+produces. For areas drawn to similar populations, such as dissemination
+areas, land area varies widely and is a poor benchmark; a population
+column is the meaningful exposure. With \code{unbiased = FALSE}, \code{R = 1000}
+and the seed of the published code, the function reproduces that code's
+results. The indices use all units as the denominator, including units
+with no events and no expected events.
 }
 \examples{
 \donttest{

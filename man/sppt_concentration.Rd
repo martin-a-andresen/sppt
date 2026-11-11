@@ -4,7 +4,7 @@
 \alias{sppt_concentration}
 \title{Crime concentration metrics}
 \usage{
-sppt_concentration(data, count_col = NULL, unbiased = FALSE)
+sppt_concentration(data, count_col = NULL, unbiased = TRUE)
 }
 \arguments{
 \item{data}{A data frame or \code{sf} object with the counts, or a numeric
@@ -13,7 +13,8 @@ vector of counts.}
 \item{count_col}{Character. One or more count columns of \code{data}. Ignored
 when \code{data} is a vector.}
 
-\item{unbiased}{Logical. Unbiased Gini? Default \code{FALSE}.}
+\item{unbiased}{Logical. Unbiased Gini (see \code{\link[=sppt_gini]{sppt_gini()}})? Default
+\code{TRUE}.}
 }
 \value{
 A data frame with one row per count column: \code{variable},

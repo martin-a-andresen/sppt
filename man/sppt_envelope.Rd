@@ -27,8 +27,9 @@ vector of counts (then \code{random_by} must be \code{"units"}).}
 
 \item{count_col}{Character. One or more count columns of \code{data}.}
 
-\item{random_by}{\code{"exposure"} (default), \code{"units"} or the name of a
-non-negative numeric column, as in \code{\link[=sppt]{sppt()}}.}
+\item{random_by}{\code{"exposure"} (default: area for polygons, length for
+lines such as street segments), \code{"units"} (equal probability) or the
+name of a non-negative numeric column, as in \code{\link[=sppt]{sppt()}}.}
 
 \item{R}{Number of random allocations. Default 1000.}
 

@@ -29,8 +29,10 @@
 #' @param x Non-negative counts, one per unit. Returns `NA` if any value is
 #'   missing or negative, or if there are no events.
 #' @param generalized Logical. Generalised Gini? Default `TRUE`.
-#' @param unbiased Logical. Unbiased form? Default `FALSE`, as in Gao and
-#'   Andresen (2025). (The lorenzgini default is `TRUE`.)
+#' @param unbiased Logical. Unbiased form, so that all events in one unit
+#'   give exactly 1? Default `TRUE`, as in lorenzgini. Gao and Andresen
+#'   (2025) used `FALSE`; the difference is a factor of \eqn{m/(m - 1)},
+#'   small unless there are few units.
 #' @param conf.level Confidence level for a bootstrap interval, or `NA`
 #'   (default) for none.
 #' @param R Number of bootstrap replicates. Default 1000. The BCa interval
@@ -52,14 +54,14 @@
 #' <https://github.com/wsteenbeek/lorenzgini>
 #'
 #' @examples
-#' sppt_gini(c(10, 8, 2, rep(0, 7)), generalized = FALSE)  # 0.78
-#' sppt_gini(c(5, 2, 1, rep(0, 7)), generalized = FALSE)   # 0.80
-#' sppt_gini(c(5, 2, 1, rep(0, 7)))                        # 0.75
-#' sppt_gini(c(10, rep(0, 9)), generalized = FALSE)        # 0.90
-#' sppt_gini(c(10, rep(0, 9)), generalized = FALSE, unbiased = TRUE)  # 1
+#' sppt_gini(c(10, 8, 2, rep(0, 7)), generalized = FALSE, unbiased = FALSE) # 0.78
+#' sppt_gini(c(5, 2, 1, rep(0, 7)), generalized = FALSE, unbiased = FALSE)  # 0.80
+#' sppt_gini(c(5, 2, 1, rep(0, 7)), unbiased = FALSE)                       # 0.75
+#' sppt_gini(c(10, rep(0, 9)), generalized = FALSE, unbiased = FALSE)       # 0.90
+#' sppt_gini(c(10, rep(0, 9)), generalized = FALSE)                         # 1
 #' @seealso [sppt_concentration()], [sppt_lorenz()], [sppt_gini_test()]
 #' @export
-sppt_gini <- function(x, generalized = TRUE, unbiased = FALSE,
+sppt_gini <- function(x, generalized = TRUE, unbiased = TRUE,
                       conf.level = NA, R = 1000, type = "bca") {
   x <- as.numeric(x)
   if (!length(x) || anyNA(x) || any(x < 0) || sum(x) <= 0) return(NA_real_)
@@ -127,7 +129,8 @@ units_for_share <- function(x, p, generalized = FALSE) {
 #'   vector of counts.
 #' @param count_col Character. One or more count columns of `data`. Ignored
 #'   when `data` is a vector.
-#' @param unbiased Logical. Unbiased Gini? Default `FALSE`.
+#' @param unbiased Logical. Unbiased Gini (see [sppt_gini()])? Default
+#'   `TRUE`.
 #'
 #' @return A data frame with one row per count column: `variable`,
 #'   `n_units`, `n_events`, `gini`, `gini_generalized`, `pct_units_50`,
@@ -150,7 +153,7 @@ units_for_share <- function(x, p, generalized = FALSE) {
 #' sppt_concentration(vancouver_ct, c("BNER2021", "BNEC2021"))
 #' @seealso [sppt_gini()], [sppt_gini_test()], [sppt_envelope()]
 #' @export
-sppt_concentration <- function(data, count_col = NULL, unbiased = FALSE) {
+sppt_concentration <- function(data, count_col = NULL, unbiased = TRUE) {
   cols <- concentration_counts(data, count_col)
   do.call(rbind, lapply(names(cols), function(nm) {
     x <- cols[[nm]]
@@ -312,23 +315,30 @@ concentration_weights <- function(data, random_by, n) {
 #' concentration index (above) and a dispersion index (below).
 #'
 #' @details
-#' Gao and Andresen (2025) give every unit equal probability. Here the
-#' default, as in [sppt()], is `random_by = "exposure"`: in proportion to
-#' area for polygons or length for lines such as street segments. Use
-#' `random_by = "units"` for the published method; with `R = 1000` and the
-#' seed of the published code, it reproduces that code's results. The
-#' indices use all units as the denominator, including units with no
-#' events and no expected events.
+#' As in Gao and Andresen (2025), every unit has equal probability by
+#' default (`random_by = "units"`), because the Gini measures inequality
+#' among units, each counted as one place. With `random_by = "exposure"`
+#' (area for polygons, length for lines) or an exposure column, the random
+#' benchmark itself carries the inequality of that exposure, and the
+#' marginal Gini becomes the concentration beyond what the exposure alone
+#' produces. For areas drawn to similar populations, such as dissemination
+#' areas, land area varies widely and is a poor benchmark; a population
+#' column is the meaningful exposure. With `unbiased = FALSE`, `R = 1000`
+#' and the seed of the published code, the function reproduces that code's
+#' results. The indices use all units as the denominator, including units
+#' with no events and no expected events.
 #'
 #' @param data An `sf` object or data frame with the counts, or a numeric
 #'   vector of counts (then `random_by` must be `"units"`).
 #' @param count_col Character. One or more count columns of `data`.
-#' @param random_by `"exposure"` (default), `"units"` or the name of a
-#'   non-negative numeric column, as in [sppt()].
+#' @param random_by `"units"` (default, equal probability), `"exposure"`
+#'   (area for polygons, length for lines) or the name of a non-negative
+#'   numeric column, as in [sppt()].
 #' @param R Number of random allocations. Default 1000.
 #' @param level Width of the envelopes. Default 0.95 (2.5th and 97.5th
 #'   percentiles).
-#' @param unbiased Logical. Unbiased generalised Gini? Default `FALSE`.
+#' @param unbiased Logical. Unbiased generalised Gini (see [sppt_gini()])?
+#'   Default `TRUE`; Gao and Andresen (2025) used `FALSE`.
 #' @param seed Optional random seed.
 #' @param verbose Logical. Print the report? Default `TRUE`.
 #'
@@ -359,8 +369,8 @@ concentration_weights <- function(data, random_by, n) {
 #' }
 #' @seealso [sppt_concentration()], [sppt_envelope()], [sppt()]
 #' @export
-sppt_gini_test <- function(data, count_col = NULL, random_by = "exposure",
-                           R = 1000L, level = 0.95, unbiased = FALSE,
+sppt_gini_test <- function(data, count_col = NULL, random_by = "units",
+                           R = 1000L, level = 0.95, unbiased = TRUE,
                            seed = NULL, verbose = TRUE) {
   check_level(level)
   R <- check_R(R)
@@ -510,6 +520,9 @@ plot.sppt_gini_test <- function(x, which = NULL, title = FALSE,
 #' concentrated beyond what random allocation produces.
 #'
 #' @inheritParams sppt_gini_test
+#' @param random_by `"exposure"` (default: area for polygons, length for
+#'   lines such as street segments), `"units"` (equal probability) or the
+#'   name of a non-negative numeric column, as in [sppt()].
 #' @param group_col Optional unit identifier column, carried into the
 #'   detail table.
 #'
