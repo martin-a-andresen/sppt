@@ -81,6 +81,8 @@ test_that("sppt_gini_test reproduces the published code with equal probability",
   expect_equal(t$concentration, mean(g$BNER2021_local == 1))
   expect_equal(sum(g$BNER2021_expected), N)
   expect_output(print(g), "Marginal Gini")
+  sub <- sf::st_drop_geometry(g)[, c("id", "BNER2021_local")]
+  expect_false(any(grepl("Gini Test", capture.output(print(head(sub))))))
 })
 
 test_that("sppt_gini_test uses units by default, exposure on request", {
