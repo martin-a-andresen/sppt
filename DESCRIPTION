@@ -20,8 +20,14 @@ Description: Implements the area-based nonparametric spatial point pattern
     flagged units are tested against the clusters that false positives
     alone produce on the same map. A longitudinal extension compares each
     period of a time series against a base period and classifies unit-level
-    trajectories. Publication-ready maps can be redrawn with user-chosen
-    layouts.
+    trajectories. A degree of similarity gives the smallest share of
+    events that would have to move for two patterns to test as the same,
+    and a single pattern can be tested against a random allocation in
+    proportion to area, length or another exposure. Crime concentration
+    is measured with the Gini and generalised Gini coefficients and the
+    share of units holding half of the events, and tested against random
+    allocation globally and by unit and rank. Publication-ready maps can
+    be redrawn with user-chosen layouts.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
@@ -29,6 +35,7 @@ LazyDataCompression: xz
 Depends:
     R (>= 4.1.0)
 Imports:
+    boot,
     classInt,
     ggplot2 (>= 3.5.0),
     ggspatial,

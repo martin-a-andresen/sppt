@@ -19,6 +19,9 @@ first period and classifies unit-level trajectories.
 share of events that would have to move for the patterns to test as the
 same.
 \item \code{\link[=sppt_map]{sppt_map()}} redraws the maps from either analysis with a chosen layout.
+\item \code{\link[=sppt_concentration]{sppt_concentration()}}, \code{\link[=sppt_gini]{sppt_gini()}} and \code{\link[=sppt_lorenz]{sppt_lorenz()}} measure crime
+concentration; \code{\link[=sppt_gini_test]{sppt_gini_test()}} and \code{\link[=sppt_envelope]{sppt_envelope()}} test it against
+random allocation.
 }
 }
 \references{

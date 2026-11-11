@@ -122,6 +122,28 @@ allocation in proportion to area would give. With `similarity = TRUE`, S_D
 gives the share of burglaries that would have to move for the pattern to be
 indistinguishable from that random allocation.
 
+## Crime concentration
+
+The package also measures how concentrated one pattern is. `sppt_concentration()`
+gives the Gini and generalised Gini coefficients and the share of units that
+hold 50 and 25 per cent of the events, in the original and generalised forms.
+
+```{r concentration}
+sppt_concentration(vancouver_ct, c("BNER2021", "BNEC2021"))
+```
+
+Concentration can arise by chance, above all when there are few events per
+unit. `sppt_gini_test()` compares the generalised Gini with random
+allocations of the same events, reports the marginal Gini (observed minus
+expected) and marks the units holding more or fewer events than random.
+`sppt_envelope()` makes the same comparison rank by rank. Both allocate in
+proportion to area by default; `random_by = "units"` gives every unit equal
+probability.
+
+```{r gini-test}
+g <- sppt_gini_test(vancouver_ct, "BNEC2021", R = 499, seed = 1)
+```
+
 ## Reading the map at fine scales
 
 At census tracts most flagged units are trustworthy individually. At finer
