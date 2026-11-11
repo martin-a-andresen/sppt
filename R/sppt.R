@@ -172,7 +172,12 @@
 #'   overlap when the difference exceeds about 2.04 standard errors, which
 #'   corresponds to a two-sample test at about `alpha = 0.05` (Andresen
 #'   2026). `0.95` reproduces the original, more conservative analysis. Only
-#'   used when `calculate_ci = TRUE`.
+#'   used when `calculate_ci = TRUE`. The correspondence assumes intervals of
+#'   similar width. Where one pattern has no events in a unit its interval
+#'   is \eqn{[0, 0]}, and non-overlap then needs only about 1.44 standard
+#'   errors of the other pattern instead of 1.96, so at fine scales with
+#'   many such units overlap flags far more units than the p-values; a note
+#'   is printed when they are at least 20% of eligible units.
 #' @param fix_base Logical. If `TRUE`, the base pattern is not bootstrapped
 #'   and its observed proportions are treated as fixed. This gives an
 #'   asymmetric test, intended only for comparison against a known reference
@@ -656,9 +661,13 @@ sppt <- function(data,
   # interval-overlap rule is not 1 - conf_level.
   s_index_ci <- NA_real_
   n_sig_ci   <- NA_integer_
+  ci_one_empty <- NA_real_
   if (calculate_ci && valid_bootstrap && n_eligible > 0L) {
     n_sig_ci   <- sum(intervals_overlap[!zero_mask] == 0L, na.rm = TRUE)
     s_index_ci <- 1 - n_sig_ci / n_eligible
+    # Share of eligible units where one pattern has no events: there its
+    # bootstrap interval collapses to [0, 0] and overlap is too liberal
+    ci_one_empty <- mean(((counts_a == 0) != (counts_b == 0))[!zero_mask])
   }
 
   # Degree of similarity, S_D, on the uncorrected flags (see Details). The
@@ -790,6 +799,11 @@ sppt <- function(data,
     say(field_lines("Robust S (CI)", sprintf(
       "%.4f (%d of %d units differ at CI = %.1f%%)", s_index_ci, n_sig_ci,
       n_eligible, conf_level * 100)))
+    if (isTRUE(ci_one_empty >= 0.2))
+      say(field_lines("Note", sprintf(paste(
+        "in %.0f%% of units one pattern has no events, so its interval is",
+        "[0, 0] there and overlap flags differences the p-values do not;",
+        "prefer the p-values at this scale"), 100 * ci_one_empty)))
   }
 
   if (!is.null(arrange_res)) {
@@ -849,6 +863,7 @@ sppt <- function(data,
     conf_level       = if (calculate_ci) conf_level else NULL,
     s_index_ci       = s_index_ci,
     n_sig_ci         = n_sig_ci,
+    ci_one_empty     = ci_one_empty,
     use_percentages  = use_percentages,
     fix_base         = fix_base,
     decision_tier    = decision_tier
@@ -1180,10 +1195,15 @@ summary.sppt_result <- function(object, ...) {
       "p %s (%s); S >= %.4f needed at tau = %.2f [%s]",
       fmt_p(s$sameness$p_value), s$sameness$method, s$sameness$threshold,
       s$sameness$tau, if (isTRUE(s$sameness$same)) "same" else "different")))
-  if (!is.null(s$conf_level) && !is.na(s$s_index_ci))
+  if (!is.null(s$conf_level) && !is.na(s$s_index_ci)) {
     cat(field_lines("Robust S (CI)", sprintf("%.4f (CI = %.1f%%; %d differ)",
                                              s$s_index_ci, s$conf_level * 100,
                                              s$n_sig_ci)))
+    if (isTRUE(s$ci_one_empty >= 0.2))
+      cat(field_lines("Note", sprintf(paste(
+        "one pattern has no events in %.0f%% of units; CI overlap is",
+        "liberal there, prefer the p-values"), 100 * s$ci_one_empty)))
+  }
   if (!is.null(s$arrangement)) {
     cat(field_lines("Arrangement", sprintf(
       "Moran's I = %+.3f on signed evidence, p %s",

@@ -2,6 +2,7 @@
 % Please edit documentation in R/sppt_sameness.R
 \name{sppt_sameness}
 \alias{sppt_sameness}
+\alias{print.sppt_sameness}
 \title{Test a robust S index against sameness}
 \usage{
 sppt_sameness(
@@ -12,6 +13,8 @@ sppt_sameness(
   tau = 0.05,
   exact = NULL
 )
+
+\method{print}{sppt_sameness}(x, ...)
 }
 \arguments{
 \item{s_index}{Numeric. Observed robust S index.}
@@ -35,12 +38,16 @@ the null distribution of S is treated as ordinary. Default \code{0.05}.}
 normal approximation. \code{NULL} (default) selects the exact test when
 \code{n_eligible < 200}, where the two diverge materially and the normal
 approximation is anti-conservative.}
+
+\item{x}{A result of \code{sppt_sameness()}.}
+
+\item{...}{Unused.}
 }
 \value{
-A list with elements \code{s_index}, \code{n_eligible}, \code{alpha}, \code{tau},
-\code{s_expected}, \code{se}, \code{threshold}, \code{z}, \code{p_value}, \code{method}, and \code{same}
-(\code{TRUE} when the two patterns are no more different than two
-realisations of one process).
+A list of class \code{sppt_sameness} with elements \code{s_index},
+\code{n_eligible}, \code{alpha}, \code{tau}, \code{s_expected}, \code{se}, \code{threshold}, \code{z},
+\code{p_value}, \code{method}, \code{same} (\code{TRUE} when the two patterns are no more
+different than two realisations of one process) and \code{n_sig}.
 }
 \description{
 Tests whether two spatial patterns are more different than two realisations

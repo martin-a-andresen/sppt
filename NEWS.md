@@ -106,6 +106,12 @@
 
 ## Other changes
 
+* With `calculate_ci = TRUE`, `sppt()` notes when at least 20% of eligible
+  units have no events in one pattern. There that pattern's interval is
+  [0, 0], so non-overlap needs only about 1.44 standard errors of the other
+  pattern, and overlap flags far more units than the p-values.
+* `sppt_sameness()` results have a print method.
+
 * Cluster outlines on the maps are drawn as one dissolved boundary per
   direction, with lighter unit borders, so clusters read at fine scales.
 * The decision tier text follows the current guidance: `alpha = 0.01` for
