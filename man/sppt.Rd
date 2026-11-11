@@ -85,7 +85,12 @@ overlap criterion. Default \code{0.85}: two marginal 85\% intervals fail to
 overlap when the difference exceeds about 2.04 standard errors, which
 corresponds to a two-sample test at about \code{alpha = 0.05} (Andresen
 2026). \code{0.95} reproduces the original, more conservative analysis. Only
-used when \code{calculate_ci = TRUE}.}
+used when \code{calculate_ci = TRUE}. The correspondence assumes intervals of
+similar width. Where one pattern has no events in a unit its interval
+is \eqn{[0, 0]}, and non-overlap then needs only about 1.44 standard
+errors of the other pattern instead of 1.96, so at fine scales with
+many such units overlap flags far more units than the p-values; a note
+is printed when they are at least 20\% of eligible units.}
 
 \item{fix_base}{Logical. If \code{TRUE}, the base pattern is not bootstrapped
 and its observed proportions are treated as fixed. This gives an

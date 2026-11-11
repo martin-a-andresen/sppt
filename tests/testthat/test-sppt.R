@@ -42,6 +42,7 @@ test_that("sppt_sameness centres S at 1 - alpha", {
   expect_equal(s$s_expected, 0.95)
   expect_true(s$same)
   expect_false(sppt_sameness(0.70, 60, 200, 0.05)$same)
+  expect_output(print(sppt_sameness(0.90, 20, 200)), "Sameness Test")
 })
 
 test_that("sppt_map redraws maps with a new layout", {
@@ -326,4 +327,18 @@ test_that("the random test flags at about alpha when the pattern is random", {
   }))
   expect_gt(rate, 0.025)
   expect_lt(rate, 0.065)
+})
+
+test_that("CI overlap notes when many units have one pattern empty", {
+  da <- suppressWarnings(sppt(vancouver_da, group_col = "id",
+                              count_col = c("BNER2021", "BNEC2021"), B = 199,
+                              seed = 1, calculate_ci = TRUE, verbose = FALSE,
+                              create_maps = FALSE, arrangement = FALSE))
+  expect_gt(attr(da, "sppt_summary")$ci_one_empty, 0.2)
+  expect_output(print(da), "prefer the p-values")
+  ct <- sppt(vancouver_ct, group_col = "id",
+             count_col = c("BNER2021", "BNEC2021"), B = 199, seed = 1,
+             calculate_ci = TRUE, verbose = FALSE, create_maps = FALSE,
+             arrangement = FALSE)
+  expect_lt(attr(ct, "sppt_summary")$ci_one_empty, 0.2)
 })

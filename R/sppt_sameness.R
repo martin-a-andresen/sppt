@@ -37,10 +37,10 @@
 #'   `n_eligible < 200`, where the two diverge materially and the normal
 #'   approximation is anti-conservative.
 #'
-#' @return A list with elements `s_index`, `n_eligible`, `alpha`, `tau`,
-#'   `s_expected`, `se`, `threshold`, `z`, `p_value`, `method`, and `same`
-#'   (`TRUE` when the two patterns are no more different than two
-#'   realisations of one process).
+#' @return A list of class `sppt_sameness` with elements `s_index`,
+#'   `n_eligible`, `alpha`, `tau`, `s_expected`, `se`, `threshold`, `z`,
+#'   `p_value`, `method`, `same` (`TRUE` when the two patterns are no more
+#'   different than two realisations of one process) and `n_sig`.
 #'
 #' @seealso [sppt()]
 #' @examples
@@ -84,5 +84,33 @@ sppt_sameness <- function(s_index, n_sig, n_eligible, alpha = 0.05,
   out$p_value    <- p
   out$method     <- if (use_exact) "exact binomial" else "normal"
   out$same       <- p >= tau
+  out$n_sig      <- if (is.na(n_sig)) NA_integer_ else as.integer(n_sig)
+  class(out) <- c("sppt_sameness", "list")
   out
+}
+
+#' @rdname sppt_sameness
+#' @param x A result of `sppt_sameness()`.
+#' @param ... Unused.
+#' @export
+print.sppt_sameness <- function(x, ...) {
+  cat("\n", rule_line(), "Sameness Test\n", rule_line(), sep = "")
+  if (is.na(x$p_value)) {
+    cat(field_lines("Result", "not computed (check the inputs)"))
+  } else {
+    cat(field_lines("S index", sprintf(
+      "%.4f%s, alpha = %.3f", x$s_index,
+      if (is.na(x$n_sig)) sprintf(" (%d eligible units)", x$n_eligible) else
+        sprintf(" (%d of %d units flagged)", x$n_sig, x$n_eligible),
+      x$alpha)))
+    cat(field_lines("Sameness", sprintf(
+      "S = %.4f expected; S >= %.4f needed at tau = %.2f", x$s_expected,
+      x$threshold, x$tau)))
+    cat(field_lines("p-value", sprintf(
+      "%s (%s); %s", fmt_p(x$p_value), x$method,
+      if (x$same) "no more different than two realisations of one process"
+      else "more different than two realisations of one process")))
+  }
+  cat(rule_line())
+  invisible(x)
 }
