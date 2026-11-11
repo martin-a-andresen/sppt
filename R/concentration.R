@@ -430,6 +430,12 @@ sppt_gini_test <- function(data, count_col = NULL, random_by = "units",
 print.sppt_gini_test <- function(x, ...) {
   tab <- attr(x, "gini_test")
   meta <- attr(x, "gini_test_meta")
+  # A table derived from the result (columns selected, geometry dropped)
+  # loses the summary: print it as an ordinary table
+  if (is.null(tab) || is.null(meta)) {
+    class(x) <- setdiff(class(x), "sppt_gini_test")
+    return(print(x, ...))
+  }
   cat("\n", rule_line(), "Gini Test Against Random Allocation\n",
       rule_line(), sep = "")
   cat(field_lines("Random", sprintf("%d allocations, %s", meta$R,
